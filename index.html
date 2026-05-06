@@ -2517,7 +2517,8 @@ function syncShopify(){
     fetch(SHEETS_URL, {
       method: 'POST',
       body: JSON.stringify({ type: 'shopify', data: freshData }),
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'text/plain' },
+      redirect: 'follow'
     })
     .then(function(r){ return r.json(); })
     .then(function(res){
@@ -4042,7 +4043,10 @@ function loadFromSheets(callback) {
     return;
   }
   showOverlay('<b>Connecting to Google Sheets...</b><br>Loading your inventory data.');
-  fetch(SHEETS_URL + '?t=' + Date.now())
+  fetch(SHEETS_URL + '?t=' + Date.now(), {
+    redirect: 'follow',
+    method: 'GET',
+  })
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (res.ok && res.data && Object.keys(res.data).length > 0) {
@@ -4115,7 +4119,8 @@ function saveToSheets(callback) {
   fetch(SHEETS_URL, {
     method: 'POST',
     body: JSON.stringify({ data: appData }),
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'text/plain' },
+    redirect: 'follow'
   })
     .then(function(r) { return r.json(); })
     .then(function(res) {
