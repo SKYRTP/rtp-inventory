@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -872,7 +873,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v83</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v87</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -897,6 +898,7 @@ body.owner-mode .team-only  { display: none; }
   <div class="page-tab owner-only" onclick="switchTab('distributor',this)">&#x1F4E6; Distributor</div>
   <div class="page-tab" onclick="switchTab('receiving',this)">&#x1F4E5; Receiving</div>
   <div class="page-tab owner-only" onclick="switchTab('orderhistory',this)">&#x1F4DC; Order History</div>
+  <div class="page-tab owner-only" onclick="switchTab('forecast',this)">&#x1F4C8; Season Forecast</div>
 </div>
 
 <!-- ═══════════════════ TAB 1: INVENTORY ═══════════════════ -->
@@ -1654,6 +1656,45 @@ body.owner-mode .team-only  { display: none; }
     <div class="ftab" onclick="setOrderHistFilter('cancelled',this)">✕ Cancelled</div>
   </div>
   <div id="oh-list"></div>
+</main>
+</div>
+
+<div class="page-content" id="tab-forecast">
+<main>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+    <div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--text)">Season Forecast</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Plan for a high-volume month (Black Friday, holidays). Works out what to order, by when, and whether stock lasts beyond the peak. Uses live stock, open orders, and current usage.</div>
+    </div>
+    <div id="fc-summary" style="font-size:11px;color:var(--muted);text-align:right"></div>
+  </div>
+
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px">
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Peak month</div>
+      <select id="fc-month" class="rfselect" style="width:auto;font-size:12px;padding:6px 10px" onchange="renderForecast()"></select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Sales multiplier in peak month</div>
+      <input type="number" id="fc-mult" value="2" min="1" max="10" step="0.1" class="inp" style="width:70px;font-size:13px;text-align:center" onchange="renderForecast()" onkeydown="if(event.key==='Enter')this.blur()">
+      <span style="font-size:10px;color:var(--muted)">x normal units</span>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Months to cover after peak</div>
+      <input type="number" id="fc-after" value="1" min="0" max="6" step="1" class="inp" style="width:60px;font-size:13px;text-align:center" onchange="renderForecast()" onkeydown="if(event.key==='Enter')this.blur()">
+    </div>
+    <div style="flex:1;min-width:180px;font-size:10px;color:var(--muted);line-height:1.5">
+      If you discount during the promotion, 2x revenue means more than 2x units. At 25% off, 2x revenue is roughly 2.7x units.
+    </div>
+  </div>
+
+  <div id="fc-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px"></div>
+  <div id="fc-order"></div>
+  <div id="fc-build" style="margin-top:22px"></div>
+  <div style="margin-top:18px">
+    <label style="font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" id="fc-showall" onchange="renderForecast()" style="vertical-align:middle"> Also show items that are already covered</label>
+  </div>
+  <div id="fc-covered" style="margin-top:12px"></div>
 </main>
 </div>
 
@@ -2770,6 +2811,230 @@ function switchTab(id, el) {
   if (id==='receiving') { renderReceivingHistory(); renderOpenOrders(); renderFreightHistory(); }
   if (id==='sales') renderSalesHistory();
   if (id==='orderhistory') renderOrderHistory();
+  if (id==='forecast') { initForecastMonths(); renderForecast(); }
+}
+
+// ─── SEASON FORECAST ──────────────────────────────────────────────────────────
+// Plans for a high-volume month (e.g. Black Friday). Read-only: it never changes
+// stock, orders, or history. It only projects demand against what is on hand and
+// already on order, and works out the order-by date from each item's lead time.
+var FC_ORDER_CATS = {'rawsock':1,'damper':1,'ratchet':1,'raw-material':1,'retail-pkg':1,'shipping-box':1,'cap':1,'towel':1};
+
+function isOwnerMode() { return !!(currentUser && currentUser.role === 'owner'); }
+
+function initForecastMonths() {
+  var sel = document.getElementById('fc-month');
+  if (!sel || sel.options.length) return;
+  var now = new Date(), html = '', defIdx = 0;
+  for (var i = 0; i < 18; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    var label = d.toLocaleDateString('en-US', {month:'long', year:'numeric'});
+    var val = d.getFullYear() + '-' + d.getMonth();
+    // Default to the next November (Black Friday month)
+    if (d.getMonth() === 10 && !defIdx) defIdx = i;
+    html += '<option value="' + val + '">' + label + '</option>';
+  }
+  sel.innerHTML = html;
+  sel.selectedIndex = defIdx;
+}
+
+function fcIncomingFor(sku, cutoff) {
+  // Units still arriving on active orders. Fulfilled, closed-short and cancelled
+  // orders are excluded, matching the rest of the app.
+  // Split by ETA: only stock that lands on or before the cutoff can cover peak
+  // demand. Anything later is reported separately so it cannot silently inflate
+  // coverage. Orders with no ETA are counted but flagged as unconfirmed.
+  var inTime = 0, late = 0, noEta = 0;
+  (appData.openOrders || []).forEach(function(o){
+    if (o.sku !== sku) return;
+    if (o.status === 'fulfilled' || o.status === 'closed-short' || o.status === 'cancelled') return;
+    var rem = (o.qtyOrdered || 0) - (o.qtyReceived || 0);
+    if (rem <= 0) return;
+    if (!o.eta) { noEta += rem; inTime += rem; return; }
+    var eta = new Date(o.eta);
+    if (isNaN(eta.getTime())) { noEta += rem; inTime += rem; return; }
+    if (eta <= cutoff) inTime += rem; else late += rem;
+  });
+  return {inTime: inTime, late: late, noEta: noEta};
+}
+
+function fcWindow() {
+  var sel = document.getElementById('fc-month');
+  var mult = parseFloat((document.getElementById('fc-mult') || {}).value);
+  var after = parseInt((document.getElementById('fc-after') || {}).value, 10);
+  if (isNaN(mult) || mult < 1) mult = 1;
+  if (isNaN(after) || after < 0) after = 0;
+  var parts = (sel && sel.value ? sel.value : '').split('-');
+  var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+  var today = new Date(); today.setHours(0,0,0,0);
+  if (isNaN(y)) { y = today.getFullYear(); m = 10; }
+  var peakStart = new Date(y, m, 1);
+  var peakEnd   = new Date(y, m + 1, 0);
+  var afterEnd  = new Date(y, m + 1 + after, 0);
+  var MS = 86400000;
+  var normalDays, peakDays;
+  if (today >= peakStart) {
+    normalDays = 0;
+    peakDays = Math.max(0, Math.round((peakEnd - today) / MS) + 1);
+  } else {
+    normalDays = Math.round((peakStart - today) / MS);
+    peakDays = peakEnd.getDate();
+  }
+  var afterDays = Math.max(0, Math.round((afterEnd - peakEnd) / MS));
+  return {
+    mult: mult, afterMonths: after, today: today,
+    peakStart: peakStart, peakEnd: peakEnd, afterEnd: afterEnd,
+    normalDays: normalDays, peakDays: peakDays, afterDays: afterDays,
+    eqPeak:  normalDays + peakDays * mult,
+    eqAfter: normalDays + peakDays * mult + afterDays
+  };
+}
+
+function fcRows() {
+  var w = fcWindow(), out = [];
+  getAllProducts().forEach(function(r){
+    if (!r.daily || r.daily <= 0) return;
+    if (r.effectiveStock === null || r.effectiveStock === undefined) return;
+    var inc = fcIncomingFor(r.sku, w.peakEnd);
+    var incoming = inc.inTime;
+    var have = r.effectiveStock + incoming;
+    var needPeak  = r.daily * w.eqPeak;
+    var needAfter = r.daily * w.eqAfter;
+    var lead = r.lead || 0;
+    var orderBy = new Date(w.peakStart.getTime() - lead * 86400000);
+    var gapPeak = needPeak - have;
+    var qty = gapPeak > 0 ? (r.moq > 0 ? Math.ceil(gapPeak / r.moq) * r.moq : Math.ceil(gapPeak)) : 0;
+    out.push({
+      r: r, incoming: incoming, incLate: inc.late, incNoEta: inc.noEta, have: have,
+      needPeak: needPeak, needAfter: needAfter,
+      gapPeak: gapPeak, gapAfter: needAfter - have,
+      orderBy: orderBy, late: orderBy < w.today,
+      qty: qty, cost: (r.cost != null ? qty * r.cost : null),
+      isOrder: !!FC_ORDER_CATS[r.cat],
+      daysCover: r.daily > 0 ? have / r.daily : null
+    });
+  });
+  return {w: w, rows: out};
+}
+
+function fcNum(n){ return Math.round(n).toLocaleString(); }
+function fcDate(d){ return d.toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}); }
+
+function renderForecast() {
+  if (!document.getElementById('fc-order')) return;
+  var data = fcRows(), w = data.w, rows = data.rows;
+  var shortOrder = rows.filter(function(x){ return x.isOrder && x.gapPeak > 0; });
+  var shortBuild = rows.filter(function(x){ return !x.isOrder && x.gapPeak > 0; });
+  var covered    = rows.filter(function(x){ return x.gapPeak <= 0; });
+  shortOrder.sort(function(a,b){ return a.orderBy - b.orderBy || b.gapPeak - a.gapPeak; });
+  shortBuild.sort(function(a,b){ return b.gapPeak - a.gapPeak; });
+
+  var totCost = 0, lateCount = 0;
+  shortOrder.forEach(function(x){ if (x.cost) totCost += x.cost; if (x.late) lateCount++; });
+  var totBuild = 0; shortBuild.forEach(function(x){ totBuild += x.gapPeak; });
+  var unitsAfterPeak = 0, itemsAfterPeak = 0;
+  rows.forEach(function(x){ if (x.incLate > 0) { unitsAfterPeak += x.incLate; itemsAfterPeak++; } });
+
+  document.getElementById('fc-summary').innerHTML =
+    'Peak: <b style="color:var(--text)">' + w.peakStart.toLocaleDateString('en-US',{month:'long',year:'numeric'}) + '</b> at ' + w.mult + 'x' +
+    '<br>' + fcNum(w.eqPeak) + ' day-equivalents of demand through ' + fcDate(w.peakEnd) +
+    (w.afterMonths > 0 ? '<br>' + fcNum(w.eqAfter) + ' through ' + fcDate(w.afterEnd) : '');
+
+  function card(label, val, sub, color) {
+    return '<div style="flex:1;min-width:150px;background:var(--card2);border:1px solid var(--border);border-left:3px solid ' + color + ';border-radius:10px;padding:12px 14px">' +
+      '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">' + label + '</div>' +
+      '<div style="font-size:22px;font-weight:700;color:' + color + ';margin-top:3px">' + val + '</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + sub + '</div></div>';
+  }
+  document.getElementById('fc-cards').innerHTML =
+    card('To order', shortOrder.length, shortOrder.length ? 'items short for the peak' : 'nothing to order', shortOrder.length ? 'var(--red)' : 'var(--lime)') +
+    card('Order date passed', lateCount, lateCount ? 'order these today' : 'all still in time', lateCount ? 'var(--red)' : 'var(--lime)') +
+    (isOwnerMode() ? card('Est. purchase cost', '$' + fcNum(totCost), 'at stored unit costs, incl. MOQ', 'var(--sky)') : '') +
+    card('To build', fcNum(totBuild), 'finished units to assemble', totBuild ? 'var(--amber)' : 'var(--lime)') +
+    (unitsAfterPeak ? card('Arrives too late', fcNum(unitsAfterPeak), 'units on ' + itemsAfterPeak + ' item' + (itemsAfterPeak !== 1 ? 's' : '') + ' land after the peak', 'var(--red)') : '') +
+    card('Covered', covered.length, 'items already have enough', 'var(--lime)');
+
+  // ORDER table
+  var h = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">&#128230; Order now</div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Bought from suppliers. Order By is the first day of the peak month minus the lead time. Red means that date has passed.</div>';
+  if (!shortOrder.length) {
+    h += '<div style="padding:14px;background:rgba(139,195,74,.08);border:1px solid rgba(139,195,74,.3);border-radius:8px;font-size:12px;color:var(--text)">Nothing needs ordering for this scenario.</div>';
+  } else {
+    h += '<div style="overflow-x:auto"><table class="inv-tbl" style="width:100%;font-size:11px"><thead><tr>' +
+      '<th style="text-align:left">Item</th><th>Lead</th><th>Order by</th><th>Stock</th><th>On order</th><th>Daily</th><th>Need</th><th>Gap</th><th>Order qty</th>' +
+      (isOwnerMode() ? '<th>Est. cost</th>' : '') + '</tr></thead><tbody>';
+    shortOrder.forEach(function(x){
+      h += '<tr>' +
+        '<td style="text-align:left"><div style="font-weight:600">' + x.r.name + (x.r.variant ? ' <span style="color:var(--muted);font-weight:400">' + x.r.variant + '</span>' : '') + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">' + x.r.sku + '</div></td>' +
+        '<td style="text-align:center">' + (x.r.lead || 0) + 'd</td>' +
+        '<td style="text-align:center;' + (x.late ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)') + '">' + fcDate(x.orderBy) + (x.late ? '<br><span style="font-size:9px">PASSED</span>' : '') + '</td>' +
+        '<td style="text-align:right">' + fcNum(x.r.effectiveStock) + '</td>' +
+        '<td style="text-align:right;color:var(--sky)">' + (x.incoming ? '+' + fcNum(x.incoming) : '\u2014') +
+          (x.incNoEta ? '<div style="font-size:8px;color:var(--amber)">' + fcNum(x.incNoEta) + ' no ETA</div>' : '') +
+          (x.incLate ? '<div style="font-size:8px;color:var(--red)">' + fcNum(x.incLate) + ' after peak</div>' : '') + '</td>' +
+        '<td style="text-align:right">' + x.r.daily.toFixed(2) + '</td>' +
+        '<td style="text-align:right">' + fcNum(x.needPeak) + '</td>' +
+        '<td style="text-align:right;color:var(--red);font-weight:600">' + fcNum(x.gapPeak) + '</td>' +
+        '<td style="text-align:right;font-weight:700">' + fcNum(x.qty) + (x.r.moq > 0 ? '<br><span style="font-size:8px;color:var(--muted)">MOQ ' + fcNum(x.r.moq) + '</span>' : '') + '</td>' +
+        (isOwnerMode() ? '<td style="text-align:right">' + (x.cost != null ? '$' + fcNum(x.cost) : '\u2014') + '</td>' : '') +
+      '</tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  document.getElementById('fc-order').innerHTML = h;
+
+  // BUILD table
+  var b = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">&#128296; Build plan</div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Assembled in-house, not purchased. Building these consumes the raw materials above.</div>';
+  if (!shortBuild.length) {
+    b += '<div style="padding:14px;background:rgba(139,195,74,.08);border:1px solid rgba(139,195,74,.3);border-radius:8px;font-size:12px;color:var(--text)">Nothing needs building for this scenario.</div>';
+  } else {
+    b += '<div style="overflow-x:auto"><table class="inv-tbl" style="width:100%;font-size:11px"><thead><tr>' +
+      '<th style="text-align:left">Item</th><th>Stock</th><th>Daily</th><th>Need</th><th>Must build</th><th>Covers until</th></tr></thead><tbody>';
+    shortBuild.forEach(function(x){
+      var runout = x.daysCover != null ? new Date(w.today.getTime() + x.daysCover * 86400000) : null;
+      b += '<tr>' +
+        '<td style="text-align:left"><div style="font-weight:600">' + x.r.name + (x.r.variant ? ' <span style="color:var(--muted);font-weight:400">' + x.r.variant + '</span>' : '') + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">' + x.r.sku + '</div></td>' +
+        '<td style="text-align:right">' + fcNum(x.r.effectiveStock) + '</td>' +
+        '<td style="text-align:right">' + x.r.daily.toFixed(2) + '</td>' +
+        '<td style="text-align:right">' + fcNum(x.needPeak) + '</td>' +
+        '<td style="text-align:right;color:var(--amber);font-weight:700">' + fcNum(x.gapPeak) + '</td>' +
+        '<td style="text-align:center;font-size:10px;color:var(--muted)">' + (runout ? fcDate(runout) : '\u2014') + '</td>' +
+      '</tr>';
+    });
+    b += '</tbody></table></div>';
+  }
+  document.getElementById('fc-build').innerHTML = b;
+
+  // Covered list (optional)
+  var showAll = (document.getElementById('fc-showall') || {}).checked;
+  var cEl = document.getElementById('fc-covered');
+  if (!showAll) { cEl.innerHTML = ''; }
+  else {
+    covered.sort(function(a,b){ return a.gapAfter - b.gapAfter; });
+    var c = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">&#10003; Already covered for the peak</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">"Covered after peak" shows whether stock also lasts through ' + fcDate(w.afterEnd) + '.</div>' +
+      '<div style="overflow-x:auto"><table class="inv-tbl" style="width:100%;font-size:11px"><thead><tr>' +
+      '<th style="text-align:left">Item</th><th>Stock</th><th>On order</th><th>Daily</th><th>Need (peak)</th><th>Spare</th><th>Covered after peak</th></tr></thead><tbody>';
+    covered.forEach(function(x){
+      c += '<tr>' +
+        '<td style="text-align:left"><div style="font-weight:600">' + x.r.name + (x.r.variant ? ' <span style="color:var(--muted);font-weight:400">' + x.r.variant + '</span>' : '') + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">' + x.r.sku + '</div></td>' +
+        '<td style="text-align:right">' + fcNum(x.r.effectiveStock) + '</td>' +
+        '<td style="text-align:right;color:var(--sky)">' + (x.incoming ? '+' + fcNum(x.incoming) : '\u2014') +
+          (x.incNoEta ? '<div style="font-size:8px;color:var(--amber)">' + fcNum(x.incNoEta) + ' no ETA</div>' : '') +
+          (x.incLate ? '<div style="font-size:8px;color:var(--red)">' + fcNum(x.incLate) + ' after peak</div>' : '') + '</td>' +
+        '<td style="text-align:right">' + x.r.daily.toFixed(2) + '</td>' +
+        '<td style="text-align:right">' + fcNum(x.needPeak) + '</td>' +
+        '<td style="text-align:right;color:var(--lime)">' + fcNum(-x.gapPeak) + '</td>' +
+        '<td style="text-align:center">' + (x.gapAfter <= 0 ? '<span style="color:var(--lime);font-weight:600">Yes</span>' : '<span style="color:var(--amber);font-weight:600">No, short ' + fcNum(x.gapAfter) + '</span>') + '</td>' +
+      '</tr>';
+    });
+    c += '</tbody></table></div>';
+    cEl.innerHTML = c;
+  }
 }
 
 // ─── RENDER INVENTORY TABLE ───────────────────────────────────────────────────
