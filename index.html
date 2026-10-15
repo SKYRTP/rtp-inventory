@@ -919,7 +919,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v112</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v113</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -1655,6 +1655,7 @@ body.owner-mode .team-only  { display: none; }
           <option value="">All Users</option>
           <option value="Sky">Sky</option>
           <option value="Daniel">Daniel</option>
+          <option value="Support">Support</option>
           <option value="SJ">SJ (retired)</option>
         </select>
       <button class="hbtn" onclick="exportHistoryCSV()">CSV</button>
@@ -9192,6 +9193,7 @@ var USERS = [
   { name: 'Sky',    role: 'owner', pin: '0903' },
   { name: 'Daniel', role: 'team',  pin: '1015' },
   { name: 'SJ',     role: 'team',  pin: '1015', retired: true }, // Retired Oct 2026: cannot sign in. Past records keep the name.
+  { name: 'Support', role: 'team', pin: '2026' },
 ];
 
 var currentUser = null;
@@ -10629,7 +10631,8 @@ setTimeout(function(){
             <option value="">All Users</option>
             <option value="Sky">Sky</option>
             <option value="Daniel">Daniel</option>
-            <option value="SJ">SJ (retired)</option>
+            <option value="Support">Support</option>
+          <option value="SJ">SJ (retired)</option>
           </select>
         </div>
         <div id="mob-hist-list"></div>
@@ -10662,6 +10665,7 @@ setTimeout(function(){
       <option value="">Select your name...</option>
       <option value="Sky">Sky</option>
       <option value="Daniel">Daniel</option>
+      <option value="Support">Support</option>
     </select>
     <div class="login-pin-label">Enter your PIN</div>
     <div class="login-dots">
