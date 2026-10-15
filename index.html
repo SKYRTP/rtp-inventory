@@ -608,12 +608,59 @@ body.theme-dark .dmp-assembled-label{color:var(--lime-dim);}
    Desktop layout is hidden; mobile UI is shown instead
 ══════════════════════════════════════════════════════════ */
 .mobile-only { display: none }
+.phone-only { display: none }
 .desktop-only { display: block }
 
 @media (max-width: 960px) {
-  /* Hide entire desktop app */
-  .desktop-only { display: none !important }
-  .mobile-only  { display: block }
+  /* Phones and narrow tablets use the same full app as desktop (one copy of every
+     feature, so rules and fixes apply everywhere). The old separate phone app is
+     retired and stays hidden. */
+  #mobile-app { display: none !important }
+
+  /* Fit the full app on a phone: nothing may push the page wider than the
+     screen. Wide tables and rows of chips scroll sideways inside their own box. */
+  html, body { overflow-x: hidden }
+  header { flex-wrap: wrap; gap: 8px; padding: 10px 12px }
+  header .hrow { flex-wrap: wrap; gap: 6px }
+  .page-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 8px; scrollbar-width: none }
+  .page-tabs::-webkit-scrollbar { display: none }
+  .page-tab { flex: 0 0 auto; white-space: nowrap }
+  main { padding: 12px 12px 80px }
+  .controls { flex-wrap: wrap }
+  .ftabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none }
+  .ftabs::-webkit-scrollbar { display: none }
+  .ftab { flex: 0 0 auto }
+  .search-wrap { max-width: none; flex-basis: 100% }
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch }
+  /* Tap targets: inputs at 16px stop iPhone zooming in on focus. */
+  input, select, textarea { font-size: 16px }
+
+  /* Header scrolls away on a phone to save room; the tab strip stays pinned. */
+  header { position: static }
+  .sync-meta { display: none }
+  .page-tabs { position: sticky; top: 0; z-index: 150 }
+
+  /* Inventory tab: cards by default, full editable table on request. */
+  .phone-only { display: block }
+  .inv-view-switch { display: flex; gap: 6px; margin-bottom: 12px }
+  .inv-view-switch .hbtn { flex: 1; padding: 9px 10px }
+  body:not(.inv-table-view) #tab-inventory .controls,
+  body:not(.inv-table-view) #tab-inventory .cat-legend,
+  body:not(.inv-table-view) #tab-inventory .tbl-wrap { display: none }
+  body.inv-table-view #inv-cards-view { display: none }
+  /* The Order Now / Order Soon / Stocked counts already show in the cards above. */
+  #mob-quick-view > div:first-child { display: none !important }
+  /* Compact summary boxes so the stock list is reachable without long scrolling. */
+  .stats { grid-template-columns: repeat(3, 1fr); gap: 8px }
+  .fin-cards { grid-template-columns: 1fr 1fr; gap: 8px }
+  .stat, .fin-card { padding: 10px 10px }
+  .stat-sub, .fin-sub { display: none }
+  .stat-val { font-size: 24px }
+  .fin-val { font-size: 20px }
+
+  /* Pop-up forms use the whole phone width. */
+  .modal-overlay { padding: 10px }
+  .modal { padding: 18px 16px }
 
   /* Mobile shell */
   #mobile-app {
@@ -872,7 +919,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v111</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v112</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -908,6 +955,11 @@ body.owner-mode .team-only  { display: none; }
     <div class="alert-dot"></div>
     <div class="alert-text" id="alert-text"></div>
   </div>
+  <!-- Phone: switch between stock cards and the full editable table. -->
+  <div class="phone-only inv-view-switch">
+    <button type="button" class="hbtn" id="inv-view-cards-btn" onclick="setInvView('cards')">Cards</button>
+    <button type="button" class="hbtn" id="inv-view-table-btn" onclick="setInvView('table')">Table (edit stock)</button>
+  </div>
   <div class="stats">
     <div class="stat s-red"><div class="stat-label">Order Now</div><div class="stat-val" id="s-crit">0</div><div class="stat-sub">at/below reorder point</div></div>
     <div class="stat s-amber"><div class="stat-label">Order Soon</div><div class="stat-val" id="s-warn">0</div><div class="stat-sub">within lead time window</div></div>
@@ -922,6 +974,48 @@ body.owner-mode .team-only  { display: none; }
     <div class="fin-card accent-muted"><div class="fin-label">Packaging Value</div><div class="fin-val" id="fin-packaging">$--</div><div class="fin-sub">raw &amp; packaging</div></div>
   </div>
   <div id="line-breakdown" style="margin-bottom:18px"></div>
+  <!-- Phone and narrow tablet: stock as cards, with a switch to the full editable table. -->
+  <div class="phone-only" id="inv-cards-view">
+
+      <!-- Quick View Cards -->
+      <div id="mob-quick-view" style="margin-bottom:14px">
+        <!-- Status row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('critical',document.querySelector('#mob-filter-chips .mob-chip:nth-child(2)'))">
+            <div style="font-size:20px;font-weight:700;color:var(--red)" id="mob-count-critical">—</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:2px">Order Now</div>
+          </div>
+          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('warn',document.querySelector('#mob-filter-chips .mob-chip:nth-child(3)'))">
+            <div style="font-size:20px;font-weight:700;color:var(--amber)" id="mob-count-warn">—</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:2px">Order Soon</div>
+          </div>
+          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('all',document.querySelector('#mob-filter-chips .mob-chip'))">
+            <div style="font-size:20px;font-weight:700;color:var(--lime)" id="mob-count-ok">—</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:2px">Stocked</div>
+          </div>
+        </div>
+        <!-- Today's activity -->
+        <div class="mob-card" style="padding:12px" id="mob-today-card">
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Today's Activity</div>
+          <div id="mob-today-list" style="font-size:11px;color:var(--muted)">No activity logged today.</div>
+        </div>
+      </div>
+
+      <div class="mob-chips" id="mob-filter-chips">
+        <div class="mob-chip on" onclick="mobSetFilter('all',this)">All</div>
+        <div class="mob-chip" onclick="mobSetFilter('critical',this)">🔴 Order Now</div>
+        <div class="mob-chip" onclick="mobSetFilter('warn',this)">🟡 Order Soon</div>
+        <div class="mob-chip mob-chip-sep" onclick="mobSetFilter('dampener',this)">🎾 Dampeners</div>
+        <div class="mob-chip" onclick="mobSetFilter('heelpad',this)">🩹 Heel Pads</div>
+        <div class="mob-chip" onclick="mobSetFilter('socks',this)">🧦 Socks</div>
+        <div class="mob-chip" onclick="mobSetFilter('grips',this)">🏸 Grips</div>
+        <div class="mob-chip" onclick="mobSetFilter('misc',this)">🎭 Misc</div>
+        <div class="mob-chip mob-chip-sep" onclick="mobSetFilter('retail-pkg',this)">📦 Retail Pkg</div>
+        <div class="mob-chip" onclick="mobSetFilter('shipping-box',this)">📫 Boxes</div>
+        <div class="mob-chip" onclick="mobSetFilter('raw-material',this)">🧱 Raw Materials</div>
+      </div>
+      <div id="mob-stock-list"></div>
+  </div>
   <div class="controls">
     <div class="ftabs">
       <div class="ftab on"  onclick="setFilter('all',this)">All</div>
@@ -1561,7 +1655,7 @@ body.owner-mode .team-only  { display: none; }
           <option value="">All Users</option>
           <option value="Sky">Sky</option>
           <option value="Daniel">Daniel</option>
-          <option value="SJ">SJ</option>
+          <option value="SJ">SJ (retired)</option>
         </select>
       <button class="hbtn" onclick="exportHistoryCSV()">CSV</button>
     </div>
@@ -3793,6 +3887,8 @@ function switchTab(id, el) {
   document.querySelectorAll('.page-content').forEach(function(c){c.classList.remove('on');});
   el.classList.add('on');
   document.getElementById('tab-'+id).classList.add('on');
+  // On a phone the tab strip scrolls sideways: bring the chosen tab into view.
+  try { el.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {}
   if (id==='pipeline') renderPipeline();
   if (id==='distributor') renderDistCalc();
   if (id==='receiving') { renderReceivingHistory(); renderOpenOrders(); renderFreightHistory(); }
@@ -4469,6 +4565,8 @@ function renderTable() {
   var dirty=Object.keys(pending).length>0;
   document.getElementById('save-bar').classList.toggle('show',dirty);
   if(dirty){var n=Object.keys(pending).length;document.getElementById('save-bar-text').textContent=n+' unsaved change'+(n>1?'s':'')+' -- click Save All';}
+  // Keep the phone stock cards in step with the table after any stock change.
+  if (isMobile()) { try { mobRenderStock(); } catch (err) { console.error('mobRenderStock', err); } }
 }
 
 // ─── COMBINED ROW HELPERS ────────────────────────────────────────────────────
@@ -8620,7 +8718,7 @@ function submitAsmDampener() {
   document.getElementById('asm-notes').value = '';
   if(document.getElementById('asm-vendor')) document.getElementById('asm-vendor').value='';
   document.getElementById('asm-preview').style.display = 'none';
-  showAlert('&#x2713; ' + qty + ' ' + c.label + ' assembled dampeners added to stock!', 'lime');
+  showAlert('✓ ' + qty + ' ' + c.label + ' assembled dampeners added to stock!', 'lime');
 }
 
 function renderAsmDmpHistory() {
@@ -8934,7 +9032,7 @@ function submitPkgDampener() {
   document.getElementById('pkgdmp-notes').value = '';
   if(document.getElementById('pkgdmp-vendor')) document.getElementById('pkgdmp-vendor').value='';
   document.getElementById('pkgdmp-preview').style.display = 'none';
-  showAlert('&#x2713; ' + qty + ' ' + c.label + ' dampeners packaged and added to stock!', 'lime');
+  showAlert('✓ ' + qty + ' ' + c.label + ' dampeners packaged and added to stock!', 'lime');
 }
 
 function renderPkgDmpHistory() {
@@ -9093,7 +9191,7 @@ function showAlert(msg, color) {
 var USERS = [
   { name: 'Sky',    role: 'owner', pin: '0903' },
   { name: 'Daniel', role: 'team',  pin: '1015' },
-  { name: 'SJ',     role: 'team',  pin: '1015' },
+  { name: 'SJ',     role: 'team',  pin: '1015', retired: true }, // Retired Oct 2026: cannot sign in. Past records keep the name.
 ];
 
 var currentUser = null;
@@ -9211,6 +9309,10 @@ function checkLogin() {
     loginPinBuffer = ''; updateLoginDots(); return;
   }
   var user = USERS.find(function(u){ return u.name === name; });
+  if (!user || user.retired) {
+    document.getElementById('login-error').textContent = 'This account is no longer active.';
+    loginPinBuffer = ''; updateLoginDots(); return;
+  }
   var validPin = (appData.userPins && appData.userPins[name]) || user.pin;
   if (loginPinBuffer === validPin) {
     currentUser = user;
@@ -10188,10 +10290,31 @@ function initMobileSyncMirror() {
 
 // ── Mobile init (called after main init completes) ────────────────────────────
 function initMobile() {
+  applyInvView();
   if (!isMobile()) return;
-  initMobileSyncMirror();
   mobRenderStock();
-  mobRenderOrders();
+}
+
+// Phone Inventory tab: cards (read at a glance) or the full table (edit stock).
+// The choice is remembered on this device only; it never touches any data.
+var _invView = null;
+function getInvView() {
+  if (_invView) return _invView;
+  try { _invView = localStorage.getItem('rtp_inv_view') === 'table' ? 'table' : 'cards'; } catch (e) { _invView = 'cards'; }
+  return _invView;
+}
+function applyInvView() {
+  var mode = getInvView();
+  document.body.classList.toggle('inv-table-view', mode === 'table');
+  var c = document.getElementById('inv-view-cards-btn'), t = document.getElementById('inv-view-table-btn');
+  if (c) c.classList.toggle('primary', mode === 'cards');
+  if (t) t.classList.toggle('primary', mode === 'table');
+}
+function setInvView(mode) {
+  _invView = (mode === 'table') ? 'table' : 'cards';
+  try { localStorage.setItem('rtp_inv_view', _invView); } catch (e) {}
+  applyInvView();
+  if (mode !== 'table') { try { mobRenderStock(); } catch (err) { console.error('mobRenderStock', err); } }
 }
 
 // ─── FONT SIZE TOGGLE ────────────────────────────────────────────────────────
@@ -10294,45 +10417,6 @@ setTimeout(function(){
 
     <!-- STOCK TAB -->
     <div class="mob-page on" id="mob-stock">
-
-      <!-- Quick View Cards -->
-      <div id="mob-quick-view" style="margin-bottom:14px">
-        <!-- Status row -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('critical',document.querySelector('#mob-filter-chips .mob-chip:nth-child(2)'))">
-            <div style="font-size:20px;font-weight:700;color:var(--red)" id="mob-count-critical">—</div>
-            <div style="font-size:9px;color:var(--muted);margin-top:2px">Order Now</div>
-          </div>
-          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('warn',document.querySelector('#mob-filter-chips .mob-chip:nth-child(3)'))">
-            <div style="font-size:20px;font-weight:700;color:var(--amber)" id="mob-count-warn">—</div>
-            <div style="font-size:9px;color:var(--muted);margin-top:2px">Order Soon</div>
-          </div>
-          <div class="mob-card" style="padding:10px;text-align:center;cursor:pointer" onclick="mobSetFilter('all',document.querySelector('#mob-filter-chips .mob-chip'))">
-            <div style="font-size:20px;font-weight:700;color:var(--lime)" id="mob-count-ok">—</div>
-            <div style="font-size:9px;color:var(--muted);margin-top:2px">Stocked</div>
-          </div>
-        </div>
-        <!-- Today's activity -->
-        <div class="mob-card" style="padding:12px" id="mob-today-card">
-          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Today's Activity</div>
-          <div id="mob-today-list" style="font-size:11px;color:var(--muted)">No activity logged today.</div>
-        </div>
-      </div>
-
-      <div class="mob-chips" id="mob-filter-chips">
-        <div class="mob-chip on" onclick="mobSetFilter('all',this)">All</div>
-        <div class="mob-chip" onclick="mobSetFilter('critical',this)">🔴 Order Now</div>
-        <div class="mob-chip" onclick="mobSetFilter('warn',this)">🟡 Order Soon</div>
-        <div class="mob-chip mob-chip-sep" onclick="mobSetFilter('dampener',this)">🎾 Dampeners</div>
-        <div class="mob-chip" onclick="mobSetFilter('heelpad',this)">🩹 Heel Pads</div>
-        <div class="mob-chip" onclick="mobSetFilter('socks',this)">🧦 Socks</div>
-        <div class="mob-chip" onclick="mobSetFilter('grips',this)">🏸 Grips</div>
-        <div class="mob-chip" onclick="mobSetFilter('misc',this)">🎭 Misc</div>
-        <div class="mob-chip mob-chip-sep" onclick="mobSetFilter('retail-pkg',this)">📦 Retail Pkg</div>
-        <div class="mob-chip" onclick="mobSetFilter('shipping-box',this)">📫 Boxes</div>
-        <div class="mob-chip" onclick="mobSetFilter('raw-material',this)">🧱 Raw Materials</div>
-      </div>
-      <div id="mob-stock-list"></div>
     </div>
 
     <!-- RECEIVE TAB -->
@@ -10545,7 +10629,7 @@ setTimeout(function(){
             <option value="">All Users</option>
             <option value="Sky">Sky</option>
             <option value="Daniel">Daniel</option>
-            <option value="SJ">SJ</option>
+            <option value="SJ">SJ (retired)</option>
           </select>
         </div>
         <div id="mob-hist-list"></div>
@@ -10578,7 +10662,6 @@ setTimeout(function(){
       <option value="">Select your name...</option>
       <option value="Sky">Sky</option>
       <option value="Daniel">Daniel</option>
-      <option value="SJ">SJ</option>
     </select>
     <div class="login-pin-label">Enter your PIN</div>
     <div class="login-dots">
