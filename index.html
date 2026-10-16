@@ -919,7 +919,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span style="font-size:9px;color:var(--muted);font-weight:400">v113</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v114</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -10676,8 +10676,14 @@ setTimeout(function(){
     </div>
     <div class="login-keys" id="login-keypad"></div>
     <div class="login-error" id="login-error"></div>
+    <div id="login-version" style="font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:.5px"></div>
   </div>
 </div>
+<script>
+// Show the running version on the sign-in screen. It is copied from the header
+// marker, so the version only ever needs bumping in one place.
+(function(){ try { var v = document.getElementById('app-version'), l = document.getElementById('login-version'); if (v && l) l.textContent = v.textContent; } catch (e) {} })();
+</script>
 
 <!-- Change PIN Modal -->
 <div class="change-pin-overlay" id="change-pin-overlay">
