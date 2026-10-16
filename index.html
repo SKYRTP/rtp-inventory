@@ -619,12 +619,14 @@ body.theme-dark .dmp-assembled-label{color:var(--lime-dim);}
 
   /* Fit the full app on a phone: nothing may push the page wider than the
      screen. Wide tables and rows of chips scroll sideways inside their own box. */
-  html, body { overflow-x: hidden }
+  /* clip (not hidden) stops sideways page scroll without breaking the pinned tab strip. */
+  html, body { overflow-x: hidden; overflow-x: clip }
   header { flex-wrap: wrap; gap: 8px; padding: 10px 12px }
   header .hrow { flex-wrap: wrap; gap: 6px }
-  .page-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 8px; scrollbar-width: none }
+  /* Tab strip: sideways scrolling only, never up and down. */
+  .page-tabs { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; padding: 0 8px; scrollbar-width: none }
   .page-tabs::-webkit-scrollbar { display: none }
-  .page-tab { flex: 0 0 auto; white-space: nowrap }
+  .page-tab { flex: 0 0 auto; white-space: nowrap; margin-bottom: 0 }
   main { padding: 12px 12px 80px }
   .controls { flex-wrap: wrap }
   .ftabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none }
