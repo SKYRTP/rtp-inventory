@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Opens full screen when added to the iPhone Home Screen. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RTP Inventory">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>RTP Inventory Command v11_roles</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,600&family=Inter:wght@400;500;600&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -921,7 +927,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v117</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v118</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -9377,7 +9383,7 @@ function showAlert(msg, color) {
 
 // ─── USER SYSTEM ─────────────────────────────────────────────────────────────
 var USERS = [
-  { name: 'Sky',    role: 'owner', pin: '0903' },
+  { name: 'Sky',    role: 'owner', password: true, pin: '0903' },
   { name: 'Daniel', role: 'team',  pin: '1015' },
   { name: 'SJ',     role: 'team',  pin: '1015', retired: true }, // Retired Oct 2026: cannot sign in. Past records keep the name.
   { name: 'Support', role: 'team', pin: '2026' },
@@ -9441,6 +9447,7 @@ function showLoginScreen() {
   updateLoginDots();
   document.getElementById('login-error').textContent = '';
   document.getElementById('login-user-select').value = '';
+  onLoginUserChange();
 }
 
 function hideLoginScreen() {
@@ -9502,8 +9509,29 @@ function checkLogin() {
     document.getElementById('login-error').textContent = 'This account is no longer active.';
     loginPinBuffer = ''; updateLoginDots(); return;
   }
+  if (user.password) { onLoginUserChange(); return; } // password accounts never sign in by keypad
   var validPin = (appData.userPins && appData.userPins[name]) || user.pin;
   if (loginPinBuffer === validPin) {
+    finishLogin(user);
+  } else {
+    document.getElementById('login-error').textContent = 'Incorrect PIN, try again';
+    loginPinBuffer = ''; updateLoginDots();
+    shuffleLoginKeys();
+    shakeLoginBox();
+  }
+}
+
+function shakeLoginBox() {
+  var box = document.querySelector('.login-box');
+  if (!box) return;
+  box.style.transform = 'translateX(-8px)';
+  setTimeout(function(){ box.style.transform = 'translateX(6px)'; }, 80);
+  setTimeout(function(){ box.style.transform = ''; }, 160);
+}
+
+// Everything that happens once someone is signed in, for keypad and password alike.
+// It always reloads fresh data from the Sheet, so a signed-in device never works on old data.
+function finishLogin(user) {
     currentUser = user;
     hideLoginScreen();
     applyUserRole();
@@ -9523,15 +9551,100 @@ function checkLogin() {
     }, reloadDelay);
     // Start inactivity timer
     if (window._resetInactivityTimer) window._resetInactivityTimer();
-  } else {
-    document.getElementById('login-error').textContent = 'Incorrect PIN — try again';
-    loginPinBuffer = ''; updateLoginDots();
-    shuffleLoginKeys();
-    var box = document.querySelector('.login-box');
-    box.style.transform = 'translateX(-8px)';
-    setTimeout(function(){ box.style.transform = 'translateX(6px)'; }, 80);
-    setTimeout(function(){ box.style.transform = ''; }, 160);
+}
+
+// ─── PASSWORD SIGN-IN (Sky) ──────────────────────────────────────────────────
+// The password is never stored. Only a salted PBKDF2 hash is kept, in
+// appData.userPassHash, so it cannot be read from the page or the Sheet.
+// Until a password is set, the current PIN works in the password box once,
+// and the app then asks for a password. After that the PIN no longer works.
+var PASS_ITERATIONS = 150000;
+
+function onLoginUserChange() {
+  var name = (document.getElementById('login-user-select') || {}).value;
+  var user = USERS.find(function(u){ return u.name === name; });
+  var usePass = !!(user && user.password);
+  var pinArea = document.getElementById('login-pin-area'), passArea = document.getElementById('login-pass-area');
+  if (pinArea) pinArea.style.display = usePass ? 'none' : '';
+  if (passArea) passArea.style.display = usePass ? '' : 'none';
+  var pu = document.getElementById('login-pass-user'); if (pu && user) pu.value = user.name;
+  var pw = document.getElementById('login-pass'); if (pw) pw.value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+function bytesToHex(buf) {
+  return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+}
+function hexToBytes(hex) {
+  var out = new Uint8Array(hex.length / 2);
+  for (var i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function hashPassword(password, saltHex, iterations) {
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
+    .then(function(key){
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: iterations, hash: 'SHA-256' }, key, 256);
+    })
+    .then(bytesToHex);
+}
+function getPassRecord(name) {
+  return (appData.userPassHash && appData.userPassHash[name]) || null;
+}
+
+function checkPasswordLogin() {
+  var name = document.getElementById('login-user-select').value;
+  var user = USERS.find(function(u){ return u.name === name; });
+  var errEl = document.getElementById('login-error');
+  if (!user || user.retired || !user.password) { errEl.textContent = 'This account is no longer active.'; return; }
+  var pwEl = document.getElementById('login-pass');
+  var typed = pwEl.value;
+  if (!typed) { errEl.textContent = 'Enter your password.'; return; }
+  var rec = getPassRecord(name);
+  if (!rec) {
+    // No password set yet: the current PIN signs in this once, then a password is required.
+    var validPin = (appData.userPins && appData.userPins[name]) || user.pin;
+    if (typed === validPin) { pwEl.value = ''; finishLogin(user); setTimeout(function(){ openChangePassModal(true); }, 400); }
+    else { errEl.textContent = 'Incorrect password, try again'; pwEl.value = ''; shakeLoginBox(); }
+    return;
   }
+  if (!(window.crypto && crypto.subtle)) { errEl.textContent = 'This browser cannot check the password securely.'; return; }
+  errEl.textContent = 'Checking...';
+  hashPassword(typed, rec.salt, rec.iter || PASS_ITERATIONS).then(function(h){
+    if (h === rec.hash) { errEl.textContent = ''; pwEl.value = ''; finishLogin(user); }
+    else { errEl.textContent = 'Incorrect password, try again'; pwEl.value = ''; shakeLoginBox(); }
+  }).catch(function(){ errEl.textContent = 'Could not check the password. Try again.'; });
+}
+
+function openChangePassModal(firstTime) {
+  document.getElementById('cpw-title').textContent = (firstTime || !getPassRecord(currentUser.name)) ? 'Set your password' : 'Change your password';
+  document.getElementById('cpw-new').value = '';
+  document.getElementById('cpw-confirm').value = '';
+  document.getElementById('cpw-error').textContent = firstTime ? 'Your PIN worked this once. Set a password to use from now on.' : '';
+  var u = document.getElementById('cpw-user'); if (u && currentUser) u.value = currentUser.name;
+  document.getElementById('change-pass-overlay').classList.add('show');
+}
+function closeChangePassModal() {
+  document.getElementById('change-pass-overlay').classList.remove('show');
+}
+function saveNewPassword() {
+  var errEl = document.getElementById('cpw-error');
+  if (!(currentUser && currentUser.password)) { errEl.textContent = 'Only Sky uses a password.'; return; }
+  var a = document.getElementById('cpw-new').value, b = document.getElementById('cpw-confirm').value;
+  if (a.length < 10) { errEl.textContent = 'Use at least 10 characters.'; return; }
+  if (a !== b) { errEl.textContent = 'The two passwords do not match.'; return; }
+  if (!(window.crypto && crypto.subtle && crypto.getRandomValues)) { errEl.textContent = 'This browser cannot save the password securely.'; return; }
+  var salt = new Uint8Array(16); crypto.getRandomValues(salt);
+  var saltHex = bytesToHex(salt);
+  errEl.textContent = 'Saving...';
+  hashPassword(a, saltHex, PASS_ITERATIONS).then(function(h){
+    if (!appData.userPassHash) appData.userPassHash = {};
+    appData.userPassHash[currentUser.name] = { salt: saltHex, iter: PASS_ITERATIONS, hash: h, setAt: todayLA() };
+    persist(appData);
+    errEl.textContent = '';
+    closeChangePassModal();
+    showAlert('✓ Password saved. Your PIN no longer signs you in.', 'lime');
+  }).catch(function(){ errEl.textContent = 'Could not save the password. Try again.'; });
 }
 
 function applyUserRole() {
@@ -9565,6 +9678,8 @@ function updateUserBadge() {
   var badge = document.getElementById('user-badge');
   if (!badge || !currentUser) return;
   var icon = currentUser.role === 'owner' ? '👑' : '👤';
+  var cred = document.getElementById('umenu-change-cred');
+  if (cred) cred.textContent = currentUser.password ? '\uD83D\uDD11 Change password' : '\uD83D\uDD11 Change PIN';
   badge.innerHTML = '<span class="user-dot"></span>' + icon + ' ' + currentUser.name;
 }
 
@@ -9578,6 +9693,7 @@ function logout() {
 }
 
 function openChangePinModal() {
+  if (currentUser && currentUser.password) { openChangePassModal(false); return; }
   changePinStep = 1; changePinFirst = ''; loginPinBuffer = '';
   document.getElementById('cp-title').textContent = 'Enter New PIN';
   document.getElementById('cp-sub').textContent = 'Choose a 4-digit PIN';
@@ -10846,7 +10962,7 @@ setTimeout(function(){
 <!-- User Menu -->
 <div id="user-menu" style="display:none;position:fixed;z-index:2000;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);padding:6px;min-width:160px;">
   <div style="padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px" id="user-menu-name">—</div>
-  <div class="umenu-item" onclick="openChangePinModal();closeUserMenu()">🔑 Change PIN</div>
+  <div class="umenu-item" id="umenu-change-cred" onclick="openChangePinModal();closeUserMenu()">🔑 Change PIN</div>
   <div class="umenu-item" onclick="logout()">🚪 Log Out</div>
 </div>
 
@@ -10856,12 +10972,13 @@ setTimeout(function(){
     <div class="login-logo">RTP Tennis</div>
     <div class="login-title">Inventory Command</div>
     <div class="login-sub">Sign in to continue</div>
-    <select id="login-user-select" class="login-select" onchange="loginPinBuffer='';updateLoginDots();shuffleLoginKeys();">
+    <select id="login-user-select" class="login-select" onchange="loginPinBuffer='';updateLoginDots();shuffleLoginKeys();onLoginUserChange();">
       <option value="">Select your name...</option>
       <option value="Sky">Sky</option>
       <option value="Daniel">Daniel</option>
       <option value="Support">Support</option>
     </select>
+    <div id="login-pin-area">
     <div class="login-pin-label">Enter your PIN</div>
     <div class="login-dots">
       <div class="login-dot" id="ldot0"></div>
@@ -10870,6 +10987,14 @@ setTimeout(function(){
       <div class="login-dot" id="ldot3"></div>
     </div>
     <div class="login-keys" id="login-keypad"></div>
+    </div>
+    <!-- Password sign-in (Sky). A real form so iPhone can save the password and fill it with Face ID. -->
+    <form id="login-pass-area" style="display:none" autocomplete="on" onsubmit="event.preventDefault();checkPasswordLogin();">
+      <input type="text" id="login-pass-user" name="username" autocomplete="username" value="Sky" readonly tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+      <div class="login-pin-label">Enter your password</div>
+      <input type="password" id="login-pass" name="password" class="login-select" autocomplete="current-password" placeholder="Password" style="margin-bottom:10px">
+      <button type="submit" class="hbtn primary" style="width:100%;padding:11px;font-size:13px">Sign in</button>
+    </form>
     <div class="login-error" id="login-error"></div>
     <div id="login-version" style="font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:.5px"></div>
   </div>
@@ -10879,6 +11004,22 @@ setTimeout(function(){
 // marker, so the version only ever needs bumping in one place.
 (function(){ try { var v = document.getElementById('app-version'), l = document.getElementById('login-version'); if (v && l) l.textContent = v.textContent; } catch (e) {} })();
 </script>
+
+<!-- Change Password Modal (Sky) -->
+<div class="change-pin-overlay" id="change-pass-overlay">
+  <div class="change-pin-box">
+    <form autocomplete="on" onsubmit="event.preventDefault();saveNewPassword();">
+      <input type="text" id="cpw-user" name="username" autocomplete="username" value="Sky" readonly tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px" id="cpw-title">Set your password</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:14px">At least 10 characters. Your iPhone can save it and fill it with Face ID.</div>
+      <input type="password" id="cpw-new" name="new-password" class="login-select" autocomplete="new-password" placeholder="New password" style="margin-bottom:8px">
+      <input type="password" id="cpw-confirm" name="confirm-password" class="login-select" autocomplete="new-password" placeholder="Type it again" style="margin-bottom:10px">
+      <button type="submit" class="hbtn primary" style="width:100%;padding:10px;font-size:12px">Save password</button>
+      <button type="button" onclick="closeChangePassModal()" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:11px;cursor:pointer">Cancel</button>
+      <div class="login-error" id="cpw-error"></div>
+    </form>
+  </div>
+</div>
 
 <!-- Change PIN Modal -->
 <div class="change-pin-overlay" id="change-pin-overlay">
