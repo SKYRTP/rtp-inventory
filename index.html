@@ -921,7 +921,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v114</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v115</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -2736,7 +2736,7 @@ function toggleJobSettled(logKey, id) {
     delete e.settledAt; delete e.settledBy;
   } else {
     e.settled = true;
-    e.settledAt = new Date().toISOString().split('T')[0];
+    e.settledAt = todayLA();
     e.settledBy = currentUser ? currentUser.name : 'Sky';
   }
   persist(appData);
@@ -2780,7 +2780,7 @@ function addVendorPayment(v) {
   var noteEl = document.getElementById('vp-pay-note');
   var n = parseMoney((amtEl || {}).value);
   if (isNaN(n) || n <= 0) { vpSay('Enter the payment amount, for example 1500'); if (amtEl) amtEl.focus(); return; }
-  var dt = ((dateEl || {}).value || '').trim() || new Date().toISOString().split('T')[0];
+  var dt = ((dateEl || {}).value || '').trim() || todayLA();
   getVendorAccount(v).payments.push({
     id: Date.now() + Math.random(),
     amount: n,
@@ -3259,7 +3259,7 @@ function renderVendorPay() {
         '<span style="font-size:10px;color:var(--muted)">Record a payment</span>' +
         '<span style="color:var(--muted);font-size:10px">$</span>' +
         '<input id="vp-pay-amt" class="inp" style="width:95px" inputmode="decimal" placeholder="1500">' +
-        '<input id="vp-pay-date" class="inp" style="width:130px;text-align:left" type="date" value="' + new Date().toISOString().split('T')[0] + '">' +
+        '<input id="vp-pay-date" class="inp" style="width:130px;text-align:left" type="date" value="' + todayLA() + '">' +
         '<input id="vp-pay-note" class="inp" style="width:170px;text-align:left" placeholder="note (optional)" onkeydown="if(event.key===\'Enter\')addVendorPayment(\'' + vf.replace(/'/g,"\\'") + '\')">' +
         '<button class="hbtn primary" style="font-size:11px;padding:5px 12px" onclick="addVendorPayment(\'' + vf.replace(/'/g,"\\'") + '\')">Add payment</button>' +
       '</div></div></div>';
@@ -5734,7 +5734,7 @@ function exportCSV(){
   });
   var blob=new Blob([hdr+lines.join('\n')],{type:'text/csv'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='rtp-inventory-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  a.download='rtp-inventory-'+todayLA()+'.csv';a.click();
 }
 
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
@@ -5946,7 +5946,7 @@ function submitPackaging() {
     id: Date.now(),
     rawSku: rawSku, finSku: finSku,
     qty: actualQty, method: method, by: by, notes: notes, doneBy: doneBy, paid: false,
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     rawBefore: rawStock, rawAfter: rawStock - actualQty,
     finBefore: finStock, finAfter: finStock + actualQty,
     retailBefore: retailStock, retailAfter: retailStock - actualQty,
@@ -6135,7 +6135,7 @@ function submitFreightInvoice() {
     vendor: vendor,
     totalFreight: totalFreight,
     ref: ref,
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     entries: selected.map(function(e) {
       var pct = e.qty / totalQty;
       return {
@@ -6263,10 +6263,27 @@ var ITEM_LEAD_TIMES = {
   'PKG-SOK-RETAIL':30,'PD-PTG-WHT-3PK':30,'PD-PTG-BLK-3PK':30,
 };
 
+// Today's date in Los Angeles as 2026-09-29, whatever time zone the device is set to.
+// Every new record is dated with this, so a job logged at 9pm in LA keeps that day's date.
+function todayLA() { return laDateOf(new Date()); }
+// The Los Angeles calendar date of a moment (a Date or a stored ISO timestamp), as 2026-09-29.
+function laDateOf(when) {
+  var d = (when instanceof Date) ? when : new Date(when);
+  if (!when || isNaN(d.getTime())) return '';
+  try {
+    var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+    var get = function(t) { return parts.filter(function(x){ return x.type === t; })[0].value; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  } catch (e) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+}
+
+// Add whole days to a plain date (2026-09-29) without any time-zone or daylight-saving shift.
 function addDays(dateStr, days) {
-  var d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  var m = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return dateStr;
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + days)).toISOString().split('T')[0];
 }
 
 function openPlaceOrderModal() {
@@ -6275,7 +6292,7 @@ function openPlaceOrderModal() {
   if (document.getElementById('po-items-list')) document.getElementById('po-items-list').innerHTML = '';
   if (document.getElementById('po-add-item-btn')) document.getElementById('po-add-item-btn').style.display = 'none';
   if (document.getElementById('po-items-hint')) document.getElementById('po-items-hint').textContent = 'select vendor first';
-  var today = new Date().toISOString().split('T')[0];
+  var today = todayLA();
   document.getElementById('po-date-ordered').value = today;
   document.getElementById('po-eta').value = '';
   document.getElementById('po-eta-hint').textContent = '';
@@ -7939,7 +7956,7 @@ function submitGripPackaging() {
   if (!appData.gripPkgLog) appData.gripPkgLog = [];
   appData.gripPkgLog.unshift({
     id: Date.now(),
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     rawSku: rawSku, finSku: finSku, pkgSku: pkgSku,
     label: label, qty: qty, rollsUsed: rollsNeeded,
     method: method, by: by || '—', notes: notes, doneBy: doneBy, paid: false,
@@ -8391,7 +8408,7 @@ function exportHistoryCSV() {
   }).join('\n');
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download = 'rtp-stock-history-'+new Date().toISOString().split('T')[0]+'.csv';
+  a.download = 'rtp-stock-history-'+todayLA()+'.csv';
   a.click();
 }
 
@@ -8699,7 +8716,7 @@ function submitAsmDampener() {
   appData.asmDmpLog.unshift({
     id: Date.now() + Math.random(),
     ts: new Date().toISOString(),
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     color: c.label, key: color, qty: qty, by: by, notes: notes, doneBy: doneBy, paid: false,
     stage: stage,
     rawSku: c.rawSku, finSku: c.finSku,
@@ -8803,7 +8820,7 @@ function submitHlpPackaging() {
   appData.hlpPkgLog.unshift({
     id: Date.now() + Math.random(),
     ts: new Date().toISOString(),
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     size: h.label, key: size, qty: qty, by: by, notes: notes, doneBy: doneBy, paid: false,
     rawSku: h.rawSku, bagSku: h.bagSku, finSku: h.finSku,
     rawBefore: rawStock, rawAfter: rawStock - qty,
@@ -8900,7 +8917,7 @@ function submitWspPackaging() {
   appData.wspPkgLog.unshift({
     id: Date.now() + Math.random(),
     ts: new Date().toISOString(),
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     qty: qty, cutUsed: cutNeeded, by: by, notes: notes, doneBy: doneBy, paid: false,
     cutBefore: cutStock, cutAfter: cutStock - cutNeeded,
     bagBefore: bagStock, bagAfter: bagStock - qty,
@@ -9012,7 +9029,7 @@ function submitPkgDampener() {
   appData.pkgDmpLog.unshift({
     id: Date.now() + Math.random(),
     ts: new Date().toISOString(),
-    date: new Date().toISOString().split('T')[0],
+    date: todayLA(),
     color: c.label, key: color, qty: qty, by: by, notes: notes, doneBy: doneBy, paid: false,
     asmSku: c.finSku, finDmpSku: finDmpSku,
     insSku: 'PKG-DMP-INS', hldSku: 'PKG-DMP-HLD', zlbSku: 'PKG-DMP-ZLB', boxSku: c.boxSku,
@@ -9590,7 +9607,7 @@ function mobRenderQuickView() {
   if (oc) oc.textContent = ok;
 
   // Today's activity — from all logs
-  var todayStr = new Date().toISOString().split('T')[0];
+  var todayStr = todayLA();
   var todayISO = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   var events = [];
 
@@ -9602,12 +9619,12 @@ function mobRenderQuickView() {
   });
   // Assembly log
   (appData.asmDmpLog || []).forEach(function(e) {
-    var d = e.ts ? e.ts.split('T')[0] : '';
+    var d = laDateOf(e.ts);
     if (d === todayStr) events.push('🔩 Assembled ' + e.qty.toLocaleString() + ' ' + e.color + ' dampeners');
   });
   // Packaged dampener log
   (appData.pkgDmpLog || []).forEach(function(e) {
-    var d = e.ts ? e.ts.split('T')[0] : '';
+    var d = laDateOf(e.ts);
     if (d === todayStr) events.push('📦 Packaged ' + e.qty.toLocaleString() + ' ' + e.color + ' dampeners');
   });
   // Sock packaging log
@@ -9620,12 +9637,12 @@ function mobRenderQuickView() {
   });
   // Heel pad packaging log
   (appData.hlpPkgLog || []).forEach(function(e) {
-    var d = e.ts ? e.ts.split('T')[0] : '';
+    var d = laDateOf(e.ts);
     if (d === todayStr) events.push('🩹 Packaged ' + e.qty.toLocaleString() + ' ' + e.size + ' heel pads');
   });
   // Wasp packaging log
   (appData.wspPkgLog || []).forEach(function(e) {
-    var d = e.ts ? e.ts.split('T')[0] : '';
+    var d = laDateOf(e.ts);
     if (d === todayStr) events.push('🐝 Packaged ' + e.qty.toLocaleString() + ' wasp strips');
   });
 
@@ -9899,7 +9916,7 @@ function mobSubmitReceiving() {
   if (!appData.receiveLog) appData.receiveLog = [];
   appData.receiveLog.unshift({
     id: Date.now(), sku: sku, qty: qty, vendor: VENDOR_NAMES[vendor] || vendor,
-    by: by, notes: notes, date: new Date().toISOString().split('T')[0],
+    by: by, notes: notes, date: todayLA(),
     stockBefore: current, stockAfter: newStock
   });
 
@@ -10347,7 +10364,7 @@ document.getElementById('loader').classList.remove('hide');
 applySize(currentSize);
 applyTheme(currentTheme);
 applyFont(currentFont);
-var todayISO = new Date().toISOString().split('T')[0];
+var todayISO = todayLA();
 document.getElementById('recv-date').value = todayISO;
 document.getElementById('sync-meta').textContent = '60-day Shopify data — reorder point = daily x lead — MOQ-aware';
 initSheetsSync(); // wrap persist to also push to Sheets
