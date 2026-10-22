@@ -2315,7 +2315,7 @@ var PRODUCTS = [
   {sku:'PD-TWL-SKY-MED',name:'UltraDry Towel',variant:'Sky Blue',cat:'towel'},
   {sku:'PD-TWL-SKY-LRG',name:'UltraDry Towel',variant:'Sky Blue Large',cat:'towel'},
   {sku:'RAW-TWL-SKY-LRG',name:'Raw UltraDry Towel',variant:'Sky Blue Large',cat:'raw-material'},
-  {sku:'PKG-TWL-SKY-MED',name:'Towel Packaging',variant:'Sky Blue Medium',cat:'retail-pkg',lead:30,moq:0},
+  {sku:'PKG-TWL-SKY-MED',name:'UltraDry Towel Packaging',variant:'',cat:'retail-pkg',lead:30,moq:0},
   // ── Assembled Dampeners (per color) ──
   {sku:'RAW-SSD-ASM-WHT',name:'Assembled Dampener',variant:'White',    cat:'assembled-dampener',lead:45,moq:0},
   {sku:'RAW-SSD-ASM-BLK',name:'Assembled Dampener',variant:'Black',    cat:'assembled-dampener',lead:45,moq:0},
@@ -4800,7 +4800,7 @@ function rowHTML(r) {
   return '<tr class="data-row cat-'+r.cat+'" id="row-'+sku+'">'+
     '<td><div class="td-p">'+(r.cat==='shipping-box'
       ? '<div class="prod-meta">'+r.name+moqHtml+'</div><div class="prod-name">'+r.variant+' &middot; '+sku+notesHtml+'</div>'
-      : '<div class="prod-meta" style="display:flex;align-items:center">'+getColorDot(r.variant)+r.variant+' &middot; '+sku+notesHtml+'</div><div class="prod-name">'+r.name+moqHtml+'</div>'
+      : '<div class="prod-meta" style="display:flex;align-items:center">'+getColorDot(r.variant)+(r.variant ? r.variant+' &middot; ' : '')+sku+notesHtml+'</div><div class="prod-name">'+r.name+moqHtml+'</div>'
     )+locCellHtml+'</div></td>'+
     '<td><div class="td-p">'+stockInput+rawDmpHtml+rawHlpHtml+rawSokHtml+finSokHtml+wspSheetHtml+barHtml+'</div></td>'+
     costCell+
@@ -7474,7 +7474,7 @@ var VENDOR_ITEMS = {
     {label:'PSG Grip Packaging — 3-Pack',   sku:'PKG-GRP-PSG-3PK'},
     {label:'PSG Grip Packaging — 6-Pack',   sku:'PKG-GRP-PSG-6PK'},
     {label:'PSG Grip Packaging — 12-Pack',  sku:'PKG-GRP-PSG-12PK'},
-    {label:'Towel Packaging',               sku:'PKG-TWL-SKY-MED'},
+    {label:'UltraDry Towel Packaging',      sku:'PKG-TWL-SKY-MED'},
     {label:'Raw UltraDry Towel, Sky Blue Large', sku:'RAW-TWL-SKY-LRG'},
     {label:'Cut Wasp Sheet',                sku:'RAW-WSP-SHEET-CUT'},
   ],
@@ -8930,8 +8930,8 @@ function renderHlpPkgHistory() {
 }
 
 // ─── PACKAGED TOWELS RETURNED ────────────────────────────────────────────────
-// Sky Blue Large only. Each towel: -1 unpackaged towel, -1 towel packaging (shared
-// with the discontinued Medium), +1 packaged towel.
+// Sky Blue Large only. Each towel: -1 unpackaged towel, -1 UltraDry Towel Packaging
+// (PKG-TWL-SKY-MED, shared with the discontinued Medium), +1 packaged towel.
 var TWL_PKG = { rawSku: 'RAW-TWL-SKY-LRG', pkgSku: 'PKG-TWL-SKY-MED', finSku: 'PD-TWL-SKY-LRG', label: 'Sky Blue Large' };
 
 function onTwlQtyChange() {
@@ -8945,7 +8945,7 @@ function onTwlQtyChange() {
   if (prev) prev.style.display = 'block';
   if (txt) txt.innerHTML =
     'Unpackaged Towel (' + TWL_PKG.label + '): <b>' + rawStock + ' → ' + (rawStock - qty) + '</b> (-' + qty + ')<br>' +
-    'Towel Packaging: <b>' + pkgStock + ' → ' + (pkgStock - qty) + '</b> (-' + qty + ')<br>' +
+    'UltraDry Towel Packaging: <b>' + pkgStock + ' → ' + (pkgStock - qty) + '</b> (-' + qty + ')<br>' +
     'Packaged Towel (' + TWL_PKG.label + '): <b>' + finStock + ' → ' + (finStock + qty) + '</b> (+' + qty + ')';
 }
 
