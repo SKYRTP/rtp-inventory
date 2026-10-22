@@ -2315,7 +2315,7 @@ var PRODUCTS = [
   {sku:'PD-TWL-SKY-MED',name:'UltraDry Towel',variant:'Sky Blue',cat:'towel'},
   {sku:'PD-TWL-SKY-LRG',name:'UltraDry Towel',variant:'Sky Blue Large',cat:'towel'},
   {sku:'RAW-TWL-SKY-LRG',name:'Raw UltraDry Towel',variant:'Sky Blue Large',cat:'raw-material'},
-  {sku:'PKG-TWL-SKY-MED',name:'UltraDry Towel Packaging',variant:'',cat:'retail-pkg',lead:30,moq:0},
+  {sku:'PKG-TWL-SKY-MED',name:'UltraDry Towel Packaging',variant:'Universal',cat:'retail-pkg',lead:30,moq:0},
   // ── Assembled Dampeners (per color) ──
   {sku:'RAW-SSD-ASM-WHT',name:'Assembled Dampener',variant:'White',    cat:'assembled-dampener',lead:45,moq:0},
   {sku:'RAW-SSD-ASM-BLK',name:'Assembled Dampener',variant:'Black',    cat:'assembled-dampener',lead:45,moq:0},
@@ -3892,7 +3892,14 @@ function computeRow(p) {
 }
 
 function getAllProducts() {
-  return PRODUCTS.concat(PACKAGING).concat(appData.custom).filter(function(p){
+  // An item added with + Add Item can later become a built-in item with the same SKU
+  // (RAW-TWL-SKY-LRG did in v116). Show the built-in one only, so the item is not listed
+  // or counted twice. Stock is stored by SKU, so both always shared one number, and the
+  // added record itself is left in the data untouched.
+  var builtIn = {};
+  PRODUCTS.concat(PACKAGING).forEach(function(p){ builtIn[p.sku] = true; });
+  var custom = (appData.custom || []).filter(function(p){ return p && !builtIn[p.sku]; });
+  return PRODUCTS.concat(PACKAGING).concat(custom).filter(function(p){
     return !appData.overrides[p.sku]||!appData.overrides[p.sku].hidden;
   }).map(computeRow);
 }
