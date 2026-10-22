@@ -921,7 +921,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v115</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v116</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -1454,6 +1454,45 @@ body.owner-mode .team-only  { display: none; }
     </div>
   </div>
 
+  <!-- Towels -->
+  <div class="recv-return-row">
+    <!-- Packaged Towels Panel -->
+    <div class="recv-form-wrap" id="pkg-twl-panel">
+      <div class="recv-form-title">&#x1F3D6; Packaged Towels Returned</div>
+      <div class="recv-form-sub">Log when packaged Sky Blue Large towels come back. Each towel deducts 1 unpackaged towel + 1 towel packaging and adds 1 packaged towel.</div>
+      <div class="recv-form">
+        <div class="rfrow">
+          <label class="rflabel">Quantity Returned</label>
+          <input type="number" id="twl-qty" class="rfinput" min="1" placeholder="e.g. 100" oninput="onTwlQtyChange()"/>
+        </div>
+        <div class="rfrow">
+          <label class="rflabel">Packaged By</label>
+          <input type="text" id="twl-by" class="rfinput" readonly style="background:var(--card2);color:var(--muted);cursor:default" placeholder="Auto-filled"/>
+        </div>
+        <div class="rfrow">
+          <label class="rflabel">Done by <span class="rfopt">outsourced only</span></label>
+          <input type="text" id="twl-vendor" class="rfinput" list="vendor-list" placeholder="Company or person paid for this work (leave blank if in-house)"/>
+        </div>
+        <div class="rfrow">
+          <label class="rflabel">Notes <span class="rfopt">optional</span></label>
+          <input type="text" id="twl-notes" class="rfinput" placeholder="e.g. 100 Large towels packaged"/>
+        </div>
+        <div class="recv-preview" id="twl-preview" style="display:none">
+          <div class="recv-preview-label">Stock update preview</div>
+          <div style="font-size:10px;color:var(--text-dim);line-height:1.7" id="twl-preview-text"></div>
+        </div>
+        <button class="hbtn primary recv-submit-btn" onclick="submitTwlPackaging()">&#x2713; Confirm: Add to Finished Stock</button>
+      </div>
+    </div>
+
+    <!-- Towel Packaging History -->
+    <div class="recv-form-wrap">
+      <div class="recv-form-title">&#x1F4CB; Towel Packaging History</div>
+      <div class="recv-form-sub">Log of all towel packaging events</div>
+      <div id="twl-history-list" style="max-height:340px;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <!-- Socks -->
   <div class="recv-return-row">
     <!-- Package Socks Panel -->
@@ -1651,6 +1690,7 @@ body.owner-mode .team-only  { display: none; }
         <option value="Sock Packaging">Sock Packaging</option>
         <option value="Grip Packaging">Grip Packaging</option>
         <option value="Heel Pad Packaging">Heel Pad Packaging</option>
+        <option value="Towel Packaging">Towel Packaging</option>
       </select>
       <input type="text" id="hist-filter-sku" class="rfinput" placeholder="Filter by SKU..." oninput="renderStockHistory()" style="font-size:10px;padding:4px 8px;width:150px"/>
         <select id="hist-filter-vendor" onchange="renderStockHistory()" class="rfselect" style="font-size:10px;padding:4px 8px">
@@ -2273,6 +2313,8 @@ var PRODUCTS = [
   {sku:'RAW-WSP-SHEET',name:'Raw Wasp Sheet',variant:'Universal',cat:'raw-material',lead:0,moq:100},
   {sku:'RAW-WSP-SHEET-CUT',name:'Cut Wasp Sheet',variant:'Universal',cat:'raw-material',lead:21,moq:0},
   {sku:'PD-TWL-SKY-MED',name:'UltraDry Towel',variant:'Sky Blue',cat:'towel'},
+  {sku:'PD-TWL-SKY-LRG',name:'UltraDry Towel',variant:'Sky Blue Large',cat:'towel'},
+  {sku:'RAW-TWL-SKY-LRG',name:'Raw UltraDry Towel',variant:'Sky Blue Large',cat:'raw-material'},
   {sku:'PKG-TWL-SKY-MED',name:'Towel Packaging',variant:'Sky Blue Medium',cat:'retail-pkg',lead:30,moq:0},
   // ── Assembled Dampeners (per color) ──
   {sku:'RAW-SSD-ASM-WHT',name:'Assembled Dampener',variant:'White',    cat:'assembled-dampener',lead:45,moq:0},
@@ -2433,6 +2475,8 @@ var VALUE_CARD_CLASS = {
   'PD-SSD-WHT-V3':'product',
   'PD-SSD-YEL-V3':'product',
   'PD-TWL-SKY-MED':'product',
+  'PD-TWL-SKY-LRG':'product',
+  'RAW-TWL-SKY-LRG':'product',
   'PD-WSP-YEL-08P-1':'product',
   'PKG-BOX-13x13x13':'packaging',
   'PKG-BOX-DMP-BLK':'packaging',
@@ -2535,6 +2579,7 @@ var OUTSOURCE_LOGS = [
   {key:'asmDmpLog',    stage:'press',    label:'Dampener press'},
   {key:'pkgDmpLog',    label:'Dampener packaging'},
   {key:'hlpPkgLog',    label:'Heel pad packaging'},
+  {key:'twlPkgLog',    label:'Towel packaging'},
   {key:'wspPkgLog',    label:'Wasp packaging'}
 ];
 
@@ -3398,6 +3443,7 @@ function productLineOf(r) {
   if (s.indexOf('PKG-HLP') === 0 || s.indexOf('RAW-HLP') === 0) return 'Heel Pads';
   if (s.indexOf('PKG-WSP') === 0 || s.indexOf('RAW-WSP') === 0) return 'Wasp Strips';
   if (s.indexOf('PKG-GRP') === 0 || s.indexOf('RAW-GRP') === 0) return 'Grips';
+  if (s.indexOf('PKG-TWL') === 0 || s.indexOf('RAW-TWL') === 0) return 'Towel';
   if (c === 'dampener' || c === 'assembled-dampener' || c === 'damper' || c === 'ratchet') return 'Dampeners';
   if (c === 'socks' || c === 'rawsock') return 'Socks';
   if (c === 'heelpad') return 'Heel Pads';
@@ -3497,7 +3543,7 @@ var INITIAL_STOCK = {
   'PD-PTG-BLK-3PK':1,'PD-PTG-BLK-6PK':1,'PD-PTG-BLK-12PK':1,
   'PD-PSG-WHT-3PK':1,'PD-PSG-WHT-6PK':1,'PD-PSG-WHT-12PK':1,
   'PD-PSG-BLK-3PK':1,'PD-PSG-BLK-6PK':1,'PD-PSG-BLK-12PK':1,
-  'PD-WSP-YEL-08P-1':10,'BN-WSP-YEL-08P-3':152,'PD-TWL-SKY-MED':240,
+  'PD-WSP-YEL-08P-1':10,'BN-WSP-YEL-08P-3':152,'PD-TWL-SKY-MED':240,'PD-TWL-SKY-LRG':0,'RAW-TWL-SKY-LRG':0,
   'RAW-WSP-SHEET':0,'RAW-WSP-SHEET-CUT':0,
   'RAW-SSD-ASM-WHT':1,'RAW-SSD-ASM-BLK':1,'RAW-SSD-ASM-BLU':1,'RAW-SSD-ASM-RED':1,'RAW-SSD-ASM-ORG':1,'RAW-SSD-ASM-YEL':1,'RAW-SSD-ASM-GRN':1,'RAW-SSD-ASM-MNT':1,'RAW-SSD-ASM-LAV':1,'RAW-SSD-ASM-PNK':1,'RAW-DMP-WHT':1,'RAW-DMP-BLK':1,'RAW-DMP-RED':1,'RAW-DMP-BLU':1,
   'RAW-DMP-ORG':1,'RAW-DMP-GRN':1,'RAW-DMP-MNT':1,'RAW-DMP-LAV':1,
@@ -3683,6 +3729,12 @@ function buildDailyUsage() {
   });
   daily['PKG-HLP-INS']        = Math.round(totalHlpDaily * 1 * 100) / 100;
 
+  // Towels: each packaged Large towel uses 1 unpackaged towel + 1 towel packaging.
+  // The packaging (PKG-TWL-SKY-MED) is shared, so it also counts any Medium sales still in the window.
+  var twlLrgDaily = daily['PD-TWL-SKY-LRG'] || 0;
+  daily['RAW-TWL-SKY-LRG'] = Math.round(twlLrgDaily * 100) / 100;
+  daily['PKG-TWL-SKY-MED'] = Math.round((twlLrgDaily + (daily['PD-TWL-SKY-MED'] || 0)) * 100) / 100;
+
   // Socks — each PD-SOK needs 1x RAW-SOK + 1x PKG-SOK-RETAIL
   var totalSokDaily = 0;
   Object.keys(RAW_TO_FINISHED).forEach(function(rawSku) {
@@ -3733,6 +3785,7 @@ function getRawDmpEffectiveStock(sku) {
 }
 
 function getRawHlpStock(sku) {
+  if (sku === 'PD-TWL-SKY-LRG') return getStockFor('RAW-TWL-SKY-LRG') || 0; // towels use the same "raw (unpackaged)" line
   var m = sku.match(/^PD-HLP-RED-(SML|MED|LRG)$/);
   if (!m) return 0;
   return getStockFor('RAW-HLP-RED-' + m[1]) || 0;
@@ -3905,7 +3958,7 @@ function switchTab(id, el) {
 // Plans for a high-volume month (e.g. Black Friday). Read-only: it never changes
 // stock, orders, or history. It only projects demand against what is on hand and
 // already on order, and works out the order-by date from each item's lead time.
-var FC_ORDER_CATS = {'rawsock':1,'damper':1,'ratchet':1,'raw-material':1,'retail-pkg':1,'shipping-box':1,'cap':1,'towel':1};
+var FC_ORDER_CATS = {'rawsock':1,'damper':1,'ratchet':1,'raw-material':1,'retail-pkg':1,'shipping-box':1,'cap':1};
 
 function isOwnerMode() { return !!(currentUser && currentUser.role === 'owner'); }
 
@@ -4575,7 +4628,7 @@ function renderTable() {
 // ─── COMBINED ROW HELPERS ────────────────────────────────────────────────────
 
 function isFinishedProduct(r) {
-  return r.cat==='dampener' || r.cat==='heelpad' || r.cat==='socks';
+  return r.cat==='dampener' || r.cat==='heelpad' || r.cat==='socks' || r.cat==='towel';
 }
 
 function hasCombinedRow(r) {
@@ -4601,6 +4654,7 @@ function getRawSourceForFinished(finSku){
   if (p) return p;
   if (finSku.indexOf('PD-HLP') === 0) return finSku.replace('PD-HLP','RAW-HLP');
   if (finSku.indexOf('PD-SOK') === 0) return finSku.replace('PD-SOK','RAW-SOK');
+  if (finSku === 'PD-TWL-SKY-LRG') return 'RAW-TWL-SKY-LRG';
   return null;
 }
 function rawAvailableForPackaging(finSku){
@@ -5892,7 +5946,7 @@ function onPkgQtyChange() {
 // Each view is isolated so one failing redraw cannot stop the rest.
 function refreshAfterStockChange() {
   ['renderStockHistory','renderReceivingHistory','renderSockPackagingHistory','renderGripPackagingHistory',
-   'renderAsmDmpHistory','renderPkgDmpHistory','renderHlpPkgHistory','renderWspPkgHistory',
+   'renderAsmDmpHistory','renderPkgDmpHistory','renderHlpPkgHistory','renderWspPkgHistory','renderTwlPkgHistory',
    'renderOrderHistory','renderOpenOrders','renderVendorPay'].forEach(function(fn){
     try { if (typeof window[fn] === 'function') window[fn](); }
     catch (err) { console.error('refresh [' + fn + ']', err); }
@@ -6415,6 +6469,9 @@ function coverageStartStock(sku) {
     var finSok = getStockFor(sku.replace('RAW-SOK-', 'PD-SOK-')) || 0;
     return own + finSok;
   }
+
+  // Unpackaged Large towels: own + packaged Large towels
+  if (sku === 'RAW-TWL-SKY-LRG') return own + (getStockFor('PD-TWL-SKY-LRG') || 0);
 
   // Raw heel pads
   var mHlp = sku.match(/^RAW-HLP-RED-(SML|MED|LRG)$/);
@@ -8146,6 +8203,10 @@ function pkgLogMovements(logKey, e) {
     add(e.rawSku, e.rawBefore, e.rawAfter);
     add(e.pkgSku, e.pkgBefore, e.pkgAfter);
     add(e.finSku, e.finBefore, e.finAfter);
+  } else if (logKey === 'twlPkgLog') {
+    add(e.rawSku, e.rawBefore, e.rawAfter);
+    add(e.pkgSku, e.pkgBefore, e.pkgAfter);
+    add(e.finSku, e.finBefore, e.finAfter);
   } else if (logKey === 'wspPkgLog') {
     add('RAW-WSP-SHEET-CUT', e.cutBefore, e.cutAfter);
     add('PKG-WSP-BAG', e.bagBefore, e.bagAfter);
@@ -8159,6 +8220,7 @@ var PKG_LOG_LABELS = {
   asmDmpLog: 'Assembly',
   pkgDmpLog: 'Dampener Packaging',
   hlpPkgLog: 'Heel Pad Packaging',
+  twlPkgLog: 'Towel Packaging',
   packagingLog: 'Sock Packaging',
   gripPkgLog: 'Grip Packaging',
   wspPkgLog: 'Wasp Strip Packaging'
@@ -8293,6 +8355,7 @@ function renderReceivingHistories() {
   try { if (typeof renderSockPackagingHistory === 'function') renderSockPackagingHistory(); } catch(e){}
   try { if (typeof renderGripPackagingHistory === 'function') renderGripPackagingHistory(); } catch(e){}
   try { if (typeof renderWspPkgHistory === 'function') renderWspPkgHistory(); } catch(e){}
+  try { if (typeof renderTwlPkgHistory === 'function') renderTwlPkgHistory(); } catch(e){}
 }
 
 function renderStockHistory() {
@@ -8865,6 +8928,103 @@ function renderHlpPkgHistory() {
   }).join('');
 }
 
+// ─── PACKAGED TOWELS RETURNED ────────────────────────────────────────────────
+// Sky Blue Large only. Each towel: -1 unpackaged towel, -1 towel packaging (shared
+// with the discontinued Medium), +1 packaged towel.
+var TWL_PKG = { rawSku: 'RAW-TWL-SKY-LRG', pkgSku: 'PKG-TWL-SKY-MED', finSku: 'PD-TWL-SKY-LRG', label: 'Sky Blue Large' };
+
+function onTwlQtyChange() {
+  var qty  = parseInt(document.getElementById('twl-qty').value) || 0;
+  var prev = document.getElementById('twl-preview');
+  var txt  = document.getElementById('twl-preview-text');
+  if (!qty || qty < 1) { if (prev) prev.style.display = 'none'; return; }
+  var rawStock = getStockFor(TWL_PKG.rawSku) || 0;
+  var pkgStock = getStockFor(TWL_PKG.pkgSku) || 0;
+  var finStock = getStockFor(TWL_PKG.finSku) || 0;
+  if (prev) prev.style.display = 'block';
+  if (txt) txt.innerHTML =
+    'Unpackaged Towel (' + TWL_PKG.label + '): <b>' + rawStock + ' → ' + (rawStock - qty) + '</b> (-' + qty + ')<br>' +
+    'Towel Packaging: <b>' + pkgStock + ' → ' + (pkgStock - qty) + '</b> (-' + qty + ')<br>' +
+    'Packaged Towel (' + TWL_PKG.label + '): <b>' + finStock + ' → ' + (finStock + qty) + '</b> (+' + qty + ')';
+}
+
+function submitTwlPackaging() {
+  var qty    = parseInt(document.getElementById('twl-qty').value) || 0;
+  var by     = (document.getElementById('twl-by').value || '').trim() || (currentUser ? currentUser.name : '');
+  var notes  = document.getElementById('twl-notes').value.trim();
+  var doneBy = ((document.getElementById('twl-vendor') || {}).value || '').trim();
+  if (!qty || qty < 1) { alert('Please enter a valid quantity.'); return; }
+
+  var rawStock = getStockFor(TWL_PKG.rawSku) || 0;
+  var pkgStock = getStockFor(TWL_PKG.pkgSku) || 0;
+  var finStock = getStockFor(TWL_PKG.finSku) || 0;
+
+  [TWL_PKG.rawSku, TWL_PKG.pkgSku, TWL_PKG.finSku].forEach(function(s){
+    if (!appData.overrides[s]) appData.overrides[s] = {};
+  });
+  appData.overrides[TWL_PKG.rawSku].stock = rawStock - qty;
+  appData.overrides[TWL_PKG.pkgSku].stock = pkgStock - qty;
+  appData.overrides[TWL_PKG.finSku].stock = finStock + qty;
+
+  logStockChange(TWL_PKG.rawSku, rawStock, rawStock - qty, 'Towel Packaging');
+  logStockChange(TWL_PKG.pkgSku, pkgStock, pkgStock - qty, 'Towel Packaging');
+  logStockChange(TWL_PKG.finSku, finStock, finStock + qty, 'Towel Packaging');
+
+  if (!appData.twlPkgLog) appData.twlPkgLog = [];
+  appData.twlPkgLog.unshift({
+    id: Date.now() + Math.random(),
+    ts: new Date().toISOString(),
+    date: todayLA(),
+    size: TWL_PKG.label, key: 'LRG', qty: qty, by: by, notes: notes, doneBy: doneBy, paid: false,
+    rawSku: TWL_PKG.rawSku, pkgSku: TWL_PKG.pkgSku, finSku: TWL_PKG.finSku,
+    rawBefore: rawStock, rawAfter: rawStock - qty,
+    pkgBefore: pkgStock, pkgAfter: pkgStock - qty,
+    finBefore: finStock, finAfter: finStock + qty
+  });
+
+  persist(appData);
+  renderTable();
+  renderTwlPkgHistory();
+  refreshAfterStockChange();
+
+  document.getElementById('twl-qty').value   = '';
+  document.getElementById('twl-notes').value = '';
+  document.getElementById('twl-vendor').value = '';
+  document.getElementById('twl-by').value    = currentUser ? currentUser.name : '';
+  document.getElementById('twl-preview').style.display = 'none';
+  // The alert bar sits in the Inventory tab, so confirm on the button the person just pressed.
+  var btn = document.querySelector('#pkg-twl-panel .recv-submit-btn');
+  if (btn) {
+    var orig = btn.innerHTML;
+    btn.innerHTML = '&#x2713; ' + qty.toLocaleString() + ' towels added to finished stock';
+    setTimeout(function(){ btn.innerHTML = orig; }, 3000);
+  }
+  showAlert('✓ ' + qty + ' ' + TWL_PKG.label + ' towels packaged and added to stock!', 'lime');
+}
+
+function renderTwlPkgHistory() {
+  var list = document.getElementById('twl-history-list');
+  if (!list) return;
+  var log = appData.twlPkgLog || [];
+  if (!log.length) {
+    list.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:12px">No towel packaging logged yet.</div>';
+    return;
+  }
+  list.innerHTML = log.map(function(e) {
+    var q = (typeof e.qty === 'number') ? e.qty.toLocaleString() : (e.qty || '-');
+    return '<div class="recv-entry" style="margin-bottom:6px;' + pkgVoidRowStyle(e) + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:10px;font-weight:500;color:var(--text);' + pkgVoidTitleStyle(e) + '">' + (e.size || 'Towel') + ': ' + q + ' units</span>' +
+        '<div style="display:flex;gap:4px">' + pkgEntryControls('twlPkgLog', e, 'renderTwlPkgHistory') + '</div>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--muted);margin-top:2px">' +
+        fmtJobDate(e) + (e.by ? ' &middot; ' + e.by : '') + (e.doneBy ? ' &middot; done by ' + e.doneBy : '') + pkgVoidBadge(e) +
+        (e.notes ? '<br><span style="color:var(--text-dim)">' + e.notes + '</span>' : '') +
+      '</div>' + pkgNoteThreadHTML(e) +
+    '</div>';
+  }).join('');
+}
+
 // ─── PACKAGED WASP STRIP RETURNED ─────────────────────────────────────────────
 // 1 cut sheet makes 6 finished strips → cut sheets consumed = ceil(qty / 6).
 // 1 pouch + 1 instruction per finished strip.
@@ -9384,6 +9544,8 @@ function applyUserRole() {
   if (pkg_byEl && currentUser) pkg_byEl.value = currentUser.name;
   var grp_byEl = document.getElementById('grp-by');
   if (grp_byEl && currentUser) grp_byEl.value = currentUser.name;
+  var twl_byEl = document.getElementById('twl-by');
+  if (twl_byEl && currentUser) twl_byEl.value = currentUser.name;
   var wsp_byEl = document.getElementById('wsp-by');
   if (wsp_byEl && currentUser) wsp_byEl.value = currentUser.name;
   var mob_byEl = document.getElementById('mob-by');
@@ -9639,6 +9801,10 @@ function mobRenderQuickView() {
   (appData.hlpPkgLog || []).forEach(function(e) {
     var d = laDateOf(e.ts);
     if (d === todayStr) events.push('🩹 Packaged ' + e.qty.toLocaleString() + ' ' + e.size + ' heel pads');
+  });
+  // Towel packaging log
+  (appData.twlPkgLog || []).forEach(function(e) {
+    if (laDateOf(e.ts) === todayStr) events.push('\uD83C\uDFD6 Packaged ' + e.qty.toLocaleString() + ' Sky Blue Large towels');
   });
   // Wasp packaging log
   (appData.wspPkgLog || []).forEach(function(e) {
@@ -10389,6 +10555,7 @@ setTimeout(function(){
     step('renderPkgDmpHistory', renderPkgDmpHistory);
     step('renderHlpPkgHistory', renderHlpPkgHistory);
     step('renderWspPkgHistory', renderWspPkgHistory);
+    step('renderTwlPkgHistory', renderTwlPkgHistory);
     step('renderStockHistory', renderStockHistory);
     step('initMobile', initMobile);
     step('initUserSystem', initUserSystem);
@@ -10644,6 +10811,7 @@ setTimeout(function(){
             <option value="Sock Packaging">Sock Packaging</option>
             <option value="Grip Packaging">Grip Packaging</option>
             <option value="Heel Pad Packaging">Heel Pad Packaging</option>
+        <option value="Towel Packaging">Towel Packaging</option>
             <option value="Wasp Strip Packaging">Wasp Strip Packaging</option>
           </select>
           <select id="mob-hist-user" onchange="mobRenderHistory()" style="flex:1;padding:6px 8px;border-radius:6px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:11px;font-family:inherit">
