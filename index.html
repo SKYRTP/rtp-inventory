@@ -927,7 +927,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v119</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v120</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -9403,6 +9403,7 @@ function initUserSystem() {
   loginPinBuffer = '';
   shuffleLoginKeys();
   updateLoginDots();
+  applyRememberedUser();
 
   // ── Auto-lock after 5 minutes of inactivity ──────────────────────────────
   var INACTIVITY_MS = 5 * 60 * 1000;
@@ -9447,6 +9448,22 @@ function showLoginScreen() {
   updateLoginDots();
   document.getElementById('login-error').textContent = '';
   document.getElementById('login-user-select').value = '';
+  applyRememberedUser();
+}
+
+// This device remembers the last name that signed in on it (the name only, never a
+// password or PIN), so the sign-in screen opens with it picked. On Sky's phone that
+// means the password box is already showing for iPhone to fill.
+function rememberLastUser(name) {
+  try { localStorage.setItem('rtp_last_user', name); } catch (e) {}
+}
+function applyRememberedUser() {
+  var sel = document.getElementById('login-user-select');
+  var name = '';
+  try { name = localStorage.getItem('rtp_last_user') || ''; } catch (e) {}
+  var user = USERS.find(function(u){ return u.name === name; });
+  var listed = sel && [].some.call(sel.options, function(o){ return o.value === name; });
+  if (sel && user && !user.retired && listed) sel.value = name;
   onLoginUserChange();
 }
 
@@ -9533,6 +9550,7 @@ function shakeLoginBox() {
 // It always reloads fresh data from the Sheet, so a signed-in device never works on old data.
 function finishLogin(user) {
     currentUser = user;
+    rememberLastUser(user.name);
     hideLoginScreen();
     applyUserRole();
     renderTable();
