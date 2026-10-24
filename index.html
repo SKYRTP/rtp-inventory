@@ -953,7 +953,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v122</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v123</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -8917,6 +8917,13 @@ function lockEditing(locked) {
 }
 
 // Load data from Google Sheets on startup
+// SAFETY CATCH (v123). A device may only save to the Sheet after it has loaded real
+// inventory data from the Sheet in this session. Until then, changes stay on the device.
+// This stops a device that failed to load (error reply, empty reply, a load that landed
+// in the middle of someone else's save) from overwriting the Sheet with its old local copy.
+var _sheetLoadedOk = false;
+var _lastLoadedJson = null;   // the exact data last loaded from the Sheet, for Download backup
+
 function loadFromSheets(callback) {
   if (!SHEETS_URL) {
     hideOverlay();
@@ -8924,6 +8931,7 @@ function loadFromSheets(callback) {
     if (callback) callback(false);
     return;
   }
+  _sheetLoadedOk = false;
   showOverlay('<b>Connecting to Google Sheets...</b><br>Loading your inventory data.');
   fetch(SHEETS_URL + '?t=' + Date.now(), {
     redirect: 'follow',
@@ -8932,6 +8940,8 @@ function loadFromSheets(callback) {
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (res.ok && res.data && Object.keys(res.data).length > 0) {
+        _sheetLoadedOk = true;
+        try { _lastLoadedJson = JSON.stringify(res.data); } catch (e) { _lastLoadedJson = null; }
         // Sheet data wins — completely replace appData
         appData = res.data;
         // Ensure all required fields exist
@@ -8986,12 +8996,19 @@ function loadFromSheets(callback) {
         setSyncStatus('ok', 'Loaded from Google Sheets: ' + new Date().toLocaleTimeString());
         if (callback) callback(true);
       } else {
-        // Sheet is empty — push local data up to Sheet
-        hideOverlay();
-        setSyncStatus('ok', 'First sync — pushing local data to Sheets');
-        saveToSheets(function(){
-          if (callback) callback(true);
-        });
+        // An error reply or an empty reply. Never upload this device's local copy in its
+        // place (that used to happen here as a "first sync" and could wipe the Sheet).
+        // Nothing is saved; the person can retry.
+        var why = (res && res.ok === false) ? ('The Sheet replied with an error: ' + (res.error || 'unknown')) : 'The Sheet sent back no inventory data. This can happen if someone was saving at that exact moment.';
+        var whyEl = document.createElement('div'); whyEl.textContent = why;
+        showOverlay(
+          '<b style="color:var(--red)">Your inventory could not be loaded</b><br>' +
+          'Nothing was saved, and nothing will be saved from this device until it loads properly.' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:10px;user-select:text;-webkit-user-select:text">' + whyEl.innerHTML + '</div>' +
+          '<button class="hbtn primary" onclick="retrySheetConnect()" style="margin-top:10px">Retry</button>'
+        );
+        setSyncStatus('err', 'Not loaded: ' + why);
+        if (callback) callback(false);
       }
     })
     .catch(function(err) {
@@ -9010,6 +9027,21 @@ function loadFromSheets(callback) {
     });
 }
 
+// Owner-only: save the inventory data exactly as last loaded from the Sheet to a file
+// on this device. Read-only: it does not change the app or the Sheet.
+function downloadBackup() {
+  if (!(currentUser && currentUser.role === 'owner')) return;
+  if (!_lastLoadedJson) { alert('No backup yet: the inventory has not been loaded from Google Sheets on this device. Sign in again or tap Retry, then try again.'); return; }
+  var now = new Date();
+  var hm = now.toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour12: false, hour: '2-digit', minute: '2-digit' }).replace(':', '');
+  var name = 'RTP_Inventory_Backup_' + todayLA() + '_' + hm + '.json';
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([_lastLoadedJson], { type: 'application/json' }));
+  a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
 function retrySheetConnect() {
   lockEditing(false);
   loadFromSheets(function(ok) {
@@ -9026,6 +9058,12 @@ function retrySheetConnect() {
 // Save data to Google Sheets
 function saveToSheets(callback) {
   if (!SHEETS_URL) {
+    if (callback) callback(false);
+    return;
+  }
+  if (!_sheetLoadedOk) {
+    // Safety catch: this device has not loaded the Sheet's data, so it must not overwrite it.
+    setSyncStatus('err', 'Not saved to Google Sheets: this device has not loaded the latest data. Tap Retry or sign in again.');
     if (callback) callback(false);
     return;
   }
@@ -11376,6 +11414,7 @@ setTimeout(function(){
 <div id="user-menu" style="display:none;position:fixed;z-index:2000;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);padding:6px;min-width:160px;">
   <div style="padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px" id="user-menu-name">—</div>
   <div class="umenu-item" id="umenu-change-cred" onclick="openChangePinModal();closeUserMenu()">🔑 Change PIN</div>
+  <div class="umenu-item owner-only" onclick="downloadBackup();closeUserMenu()">⬇ Download backup</div>
   <div class="umenu-item" onclick="logout()">🚪 Log Out</div>
 </div>
 
