@@ -980,7 +980,7 @@ body.owner-mode .team-only  { display: none; }
   <div class="page-tab owner-only" onclick="switchTab('orderhistory',this)">&#x1F4DC; Order History</div>
   <div class="page-tab owner-only" onclick="switchTab('forecast',this)">&#x1F4C8; Season Forecast</div>
   <div class="page-tab owner-only" onclick="switchTab('vendorpay',this)">&#x1F4B5; Outsourced Work</div>
-  <div class="page-tab owner-only" onclick="switchTab('tracker',this)">&#x1F4C5; History</div>
+  <div class="page-tab owner-only" onclick="switchTab('tracker',this)">&#x1F4C5; Daily Tracker</div>
 </div>
 
 <!-- ═══════════════════ TAB 1: INVENTORY ═══════════════════ -->
@@ -1705,12 +1705,12 @@ body.owner-mode .team-only  { display: none; }
 
 </main>
 </div>
-<!-- ═══════════════════ TAB: HISTORY (read-only, from the RTP Daily Inventory Tracker sheet) ═══════════════════ -->
+<!-- ═══════════════════ TAB: DAILY TRACKER (read-only, from the RTP Daily Inventory Tracker sheet) ═══════════════════ -->
 <div class="page-content" id="tab-tracker">
 <main>
   <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:14px">
     <div>
-      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--text)">History</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--text)">Daily Tracker</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px">Read-only view of the RTP Daily Inventory Tracker sheet. Nothing here changes stock or the sheet.</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -1736,7 +1736,7 @@ body.owner-mode .team-only  { display: none; }
 </main>
 </div>
 
-<!-- History: one SKU's timeline -->
+<!-- Daily Tracker: one SKU's timeline -->
 <div class="modal-overlay" id="trk-modal" onclick="if(event.target===this)trkCloseTimeline()">
   <div class="modal" style="width:760px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
@@ -4040,7 +4040,7 @@ function switchTab(id, el) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HISTORY TAB (read-only). Reads the "RTP Daily Inventory Tracker" Google Sheet
+// DAILY TRACKER TAB (read-only). Reads the "RTP Daily Inventory Tracker" Google Sheet
 // through its published-to-web CSV links. It only ever fetches (GET); it never
 // writes to the sheet, never touches appData, and never calls persist().
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4124,7 +4124,7 @@ function trkFetch(url) {
 
 function trkOpen() {
   try { if (!trkData && !trkLoading) trkLoad(false); else trkRenderAll(); }
-  catch (e) { trkShowError('History could not be shown: ' + (e && e.message ? e.message : e)); }
+  catch (e) { trkShowError('Daily Tracker could not be shown: ' + (e && e.message ? e.message : e)); }
 }
 
 function trkLoad(force) {
@@ -4143,7 +4143,7 @@ function trkLoad(force) {
     trkRenderAll();
   }).catch(function(e){
     trkLoading = false;
-    trkShowError('History could not be loaded: ' + (e && e.message ? e.message : e));
+    trkShowError('Daily Tracker could not be loaded: ' + (e && e.message ? e.message : e));
   });
 }
 
