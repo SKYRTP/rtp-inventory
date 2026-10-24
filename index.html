@@ -613,6 +613,32 @@ body.theme-dark .dmp-assembled-label{color:var(--lime-dim);}
    MOBILE VIEW  — screens ≤ 768px
    Desktop layout is hidden; mobile UI is shown instead
 ══════════════════════════════════════════════════════════ */
+
+/* ── History tab (read-only tracker) ── */
+.trk-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px}
+.trk-controls .rfselect,.trk-controls .rfinput{width:auto;min-width:150px}
+.trk-controls .rfinput{width:100%}
+.trk-lbl{font-size:10px;color:var(--muted);margin-bottom:4px}
+.trk-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.trk-card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:10px 12px}
+.trk-card .v{font-family:'Fraunces',serif;font-size:24px;font-weight:600;line-height:1.1}
+.trk-card .l{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.trk-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.trk-tbl th{padding:7px 9px;text-align:left;white-space:nowrap}
+.trk-tbl td{padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+.trk-tbl td.n,.trk-tbl th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.trk-tbl tr.trk-miss td{background:rgba(204,32,32,.10)}
+.trk-tbl tr.trk-check td{background:rgba(176,120,0,.12)}
+.trk-tbl tr.trk-short td{background:rgba(204,32,32,.10)}
+.trk-tbl tr.trk-over td{background:rgba(176,120,0,.12)}
+.trk-sku{color:var(--sky);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.trk-note{color:var(--text-dim);max-width:340px}
+.trk-h2{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:22px 0 8px}
+.trk-h3{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+.trk-error{background:rgba(204,32,32,.08);border:1px solid rgba(204,32,32,.3);color:var(--red);border-radius:9px;padding:10px 12px;font-size:11px;margin-bottom:14px;line-height:1.6}
+.trk-empty{font-size:11px;color:var(--muted);padding:12px;background:var(--card);border:1px solid var(--border);border-radius:9px}
+.trk-more{display:flex;gap:6px;justify-content:center;margin:8px 0}
+@media (max-width: 960px){ .trk-cards{grid-template-columns:repeat(2,1fr)} .trk-controls .rfselect{min-width:0;width:100%} .trk-controls > div{flex:1 1 100%} }
 .mobile-only { display: none }
 .phone-only { display: none }
 .desktop-only { display: block }
@@ -927,7 +953,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v121</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v122</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -954,6 +980,7 @@ body.owner-mode .team-only  { display: none; }
   <div class="page-tab owner-only" onclick="switchTab('orderhistory',this)">&#x1F4DC; Order History</div>
   <div class="page-tab owner-only" onclick="switchTab('forecast',this)">&#x1F4C8; Season Forecast</div>
   <div class="page-tab owner-only" onclick="switchTab('vendorpay',this)">&#x1F4B5; Outsourced Work</div>
+  <div class="page-tab owner-only" onclick="switchTab('tracker',this)">&#x1F4C5; History</div>
 </div>
 
 <!-- ═══════════════════ TAB 1: INVENTORY ═══════════════════ -->
@@ -1678,6 +1705,50 @@ body.owner-mode .team-only  { display: none; }
 
 </main>
 </div>
+<!-- ═══════════════════ TAB: HISTORY (read-only, from the RTP Daily Inventory Tracker sheet) ═══════════════════ -->
+<div class="page-content" id="tab-tracker">
+<main>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+    <div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--text)">History</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Read-only view of the RTP Daily Inventory Tracker sheet. Nothing here changes stock or the sheet.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="trk-loaded" style="font-size:10px;color:var(--muted)"></span>
+      <button class="hbtn" onclick="trkLoad(true)">&#x27F3; Refresh</button>
+    </div>
+  </div>
+  <div id="trk-error" class="trk-error" style="display:none"></div>
+
+  <div class="trk-controls">
+    <div><div class="trk-lbl">Date</div><select id="trk-date" class="rfselect" onchange="trkRenderDay()"></select></div>
+    <div style="flex:1;min-width:180px"><div class="trk-lbl">Search SKU or product</div><input type="text" id="trk-search" class="rfinput" placeholder="e.g. Ankle or PD-SOK" oninput="trkRenderDay()"></div>
+    <div><div class="trk-lbl">Category</div><select id="trk-cat" class="rfselect" onchange="trkRenderDay()"><option value="">All categories</option></select></div>
+  </div>
+
+  <div id="trk-summary" class="trk-cards"></div>
+  <div id="trk-day"></div>
+
+  <div class="trk-h2">Weekly counts</div>
+  <div id="trk-weekly"></div>
+  <div class="trk-h3">Count History</div>
+  <div id="trk-history"></div>
+</main>
+</div>
+
+<!-- History: one SKU's timeline -->
+<div class="modal-overlay" id="trk-modal" onclick="if(event.target===this)trkCloseTimeline()">
+  <div class="modal" style="width:760px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+      <div><h2 id="trk-tl-title" style="margin-bottom:2px">Timeline</h2><div id="trk-tl-sub" style="font-size:10px;color:var(--muted)"></div></div>
+      <button class="hbtn" onclick="trkCloseTimeline()">Close</button>
+    </div>
+    <div id="trk-tl-flag"></div>
+    <div id="trk-tl-chart"></div>
+    <div id="trk-tl-table"></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ TAB 4: STOCK HISTORY ═══════════════════ -->
 <div class="page-content" id="tab-history">
 <main>
@@ -3965,6 +4036,330 @@ function switchTab(id, el) {
   if (id==='orderhistory') renderOrderHistory();
   if (id==='forecast') { initForecastMonths(); renderForecast(); }
   if (id==='vendorpay') renderVendorPay();
+  if (id==='tracker') trkOpen();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HISTORY TAB (read-only). Reads the "RTP Daily Inventory Tracker" Google Sheet
+// through its published-to-web CSV links. It only ever fetches (GET); it never
+// writes to the sheet, never touches appData, and never calls persist().
+// ═══════════════════════════════════════════════════════════════════════════
+// Paste the three "Publish to web" CSV links here (File > Share > Publish to web).
+var TRK_CSV = {
+  daily:   '',   // "Daily Log" tab
+  weekly:  '',   // "Weekly Count" tab
+  history: ''    // "Count History" tab
+};
+var trkData = null, trkLoading = false, trkLimit = 50, trkHistLimit = 50;
+
+function trkEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+// Numbers arrive formatted ("1,170", "-5", ""). Blank stays blank (null), never 0.
+function trkNum(v) {
+  var t = String(v == null ? '' : v).replace(/[,\s$]/g, '');
+  if (t === '' || t === '-') return null;
+  var n = Number(t);
+  return isNaN(n) ? null : n;
+}
+function trkFmt(n) { return (n === null || n === undefined) ? '' : n.toLocaleString(); }
+function trkFmtDate(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return trkEsc(iso || '');
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+// Small CSV parser: quoted fields, embedded commas, quotes and line breaks.
+function trkParseCSV(text) {
+  var rows = [], row = [], f = '', q = false;
+  text = String(text || '').replace(/^﻿/, '');
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(f); rows.push(row); row = []; f = '';
+    } else f += c;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+// Turn rows into objects keyed by header text, so column order in the sheet does not matter.
+function trkObjects(text) {
+  var rows = trkParseCSV(text);
+  if (!rows.length) return [];
+  var head = rows[0].map(function(h){ return String(h).trim(); });
+  return rows.slice(1).filter(function(r){ return r.some(function(x){ return String(x).trim() !== ''; }); }).map(function(r, i){
+    var o = { _row: i };
+    head.forEach(function(h, j){ if (h) o[h] = (r[j] == null ? '' : String(r[j]).trim()); });
+    return o;
+  });
+}
+function trkGet(o, names) { for (var i = 0; i < names.length; i++) { if (o[names[i]] !== undefined) return o[names[i]]; } return ''; }
+
+function trkFetch(url) {
+  if (!url) return Promise.reject(new Error('Not connected yet: the CSV link for this tab has not been added.'));
+  var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var t = ctl ? setTimeout(function(){ ctl.abort(); }, 20000) : null;
+  var bust = (url.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now();
+  return fetch(url + bust, { method: 'GET', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+    .then(function(r){
+      if (t) clearTimeout(t);
+      if (!r.ok) throw new Error('The sheet answered with error ' + r.status + '. Check the tab is still published.');
+      return r.text();
+    })
+    .then(function(txt){
+      if (/^\s*</.test(txt)) throw new Error('The link returned a web page, not CSV. Use the CSV link from Publish to web.');
+      return txt;
+    })
+    .catch(function(e){
+      if (t) clearTimeout(t);
+      if (e && e.name === 'AbortError') throw new Error('The sheet took too long to answer.');
+      throw e;
+    });
+}
+
+function trkOpen() {
+  try { if (!trkData && !trkLoading) trkLoad(false); else trkRenderAll(); }
+  catch (e) { trkShowError('History could not be shown: ' + (e && e.message ? e.message : e)); }
+}
+
+function trkLoad(force) {
+  if (trkLoading) return;
+  trkLoading = true;
+  var loadedEl = document.getElementById('trk-loaded');
+  if (loadedEl) loadedEl.textContent = 'Loading from the sheet...';
+  var parts = ['daily', 'weekly', 'history'];
+  Promise.all(parts.map(function(k){
+    return trkFetch(TRK_CSV[k]).then(function(txt){ return { ok: true, rows: trkObjects(txt) }; },
+                                     function(e){ return { ok: false, err: (e && e.message) ? e.message : String(e) }; });
+  })).then(function(res){
+    trkLoading = false;
+    trkData = { daily: res[0], weekly: res[1], history: res[2], at: new Date() };
+    trkLimit = 50; trkHistLimit = 50;
+    trkRenderAll();
+  }).catch(function(e){
+    trkLoading = false;
+    trkShowError('History could not be loaded: ' + (e && e.message ? e.message : e));
+  });
+}
+
+function trkShowError(msg) {
+  var el = document.getElementById('trk-error');
+  if (!el) return;
+  if (!msg) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = msg;
+}
+
+function trkRenderAll() {
+  if (!trkData) return;
+  var errs = [];
+  var names = { daily: 'Daily Log', weekly: 'Weekly Count', history: 'Count History' };
+  ['daily', 'weekly', 'history'].forEach(function(k){ if (!trkData[k].ok) errs.push('<b>' + names[k] + ':</b> ' + trkEsc(trkData[k].err)); });
+  trkShowError(errs.length ? 'Some of the sheet could not be loaded. The rest of the app is not affected.<br>' + errs.join('<br>') : '');
+  var loadedEl = document.getElementById('trk-loaded');
+  if (loadedEl) loadedEl.textContent = 'Loaded ' + trkData.at.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  // Date and category choices from the Daily Log
+  var dSel = document.getElementById('trk-date'), cSel = document.getElementById('trk-cat');
+  var rows = trkData.daily.ok ? trkData.daily.rows : [];
+  var dates = [], cats = [];
+  rows.forEach(function(r){
+    var d = trkGet(r, ['Date']); if (d && dates.indexOf(d) < 0) dates.push(d);
+    var c = trkGet(r, ['Category']); if (c && cats.indexOf(c) < 0) cats.push(c);
+  });
+  dates.sort().reverse();
+  var keepD = dSel.value, keepC = cSel.value;
+  dSel.innerHTML = dates.length ? dates.map(function(d){ return '<option value="' + trkEsc(d) + '">' + trkFmtDate(d) + '</option>'; }).join('') : '<option value="">No dates</option>';
+  if (keepD && dates.indexOf(keepD) >= 0) dSel.value = keepD;   // otherwise the latest date stays selected
+  cSel.innerHTML = '<option value="">All categories</option>' + cats.map(function(c){ return '<option value="' + trkEsc(c) + '">' + trkEsc(c) + '</option>'; }).join('');
+  if (keepC && cats.indexOf(keepC) >= 0) cSel.value = keepC;
+  trkRenderDay();
+  trkRenderWeekly();
+}
+
+function trkStatusClass(st) {
+  st = String(st || '').trim().toUpperCase();
+  if (st === 'POSSIBLE MISSING') return 'trk-miss';
+  if (st === 'CHECK') return 'trk-check';
+  return '';
+}
+function trkBadge(st) {
+  var u = String(st || '').trim().toUpperCase();
+  var cls = u === 'POSSIBLE MISSING' ? 'b-red' : u === 'CHECK' ? 'b-amber' : u === 'MATCHED' ? 'b-lime' : 'b-muted';
+  return st ? '<span class="badge ' + cls + '">' + trkEsc(st) + '</span>' : '';
+}
+function trkLabel(r) {
+  var p = trkGet(r, ['Product']), v = trkGet(r, ['Variant']);
+  return trkEsc(p) + (v ? ' &middot; ' + trkEsc(v) : '');
+}
+function trkMatches(r, q, cat) {
+  if (cat && trkGet(r, ['Category']) !== cat) return false;
+  if (!q) return true;
+  var hay = (trkGet(r, ['SKU']) + ' ' + trkGet(r, ['Product']) + ' ' + trkGet(r, ['Variant'])).toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(function(w){ return !w || hay.indexOf(w) >= 0; });
+}
+
+function trkRenderDay() {
+  var host = document.getElementById('trk-day'), sum = document.getElementById('trk-summary');
+  if (!host || !trkData) return;
+  if (!trkData.daily.ok) { sum.innerHTML = ''; host.innerHTML = '<div class="trk-empty">The Daily Log could not be loaded, so there is nothing to show yet.</div>'; return; }
+  var date = document.getElementById('trk-date').value;
+  var q = (document.getElementById('trk-search').value || '').trim();
+  var cat = document.getElementById('trk-cat').value;
+  var dayRows = trkData.daily.rows.filter(function(r){ return trkGet(r, ['Date']) === date; });
+  // Summary covers the whole selected date (not just the filtered rows)
+  var tin = 0, tout = 0, nCheck = 0, nMiss = 0;
+  dayRows.forEach(function(r){
+    var ch = trkNum(trkGet(r, ['App Change'])); if (ch !== null && ch > 0) tin += ch;
+    var so = trkNum(trkGet(r, ['Units Sold'])); if (so !== null) tout += so;
+    var c = trkStatusClass(trkGet(r, ['Status'])); if (c === 'trk-check') nCheck++; if (c === 'trk-miss') nMiss++;
+  });
+  sum.innerHTML =
+    '<div class="trk-card"><div class="l">Total in</div><div class="v" style="color:var(--lime)">' + tin.toLocaleString() + '</div></div>' +
+    '<div class="trk-card"><div class="l">Total out (shipped)</div><div class="v" style="color:var(--sky)">' + tout.toLocaleString() + '</div></div>' +
+    '<div class="trk-card"><div class="l">Check</div><div class="v" style="color:var(--amber)">' + nCheck + '</div></div>' +
+    '<div class="trk-card"><div class="l">Possible missing</div><div class="v" style="color:var(--red)">' + nMiss + '</div></div>';
+  var shown = dayRows.filter(function(r){ return trkMatches(r, q, cat); });
+  // POSSIBLE MISSING first; everything else keeps the sheet's row order.
+  var miss = shown.filter(function(r){ return trkStatusClass(trkGet(r, ['Status'])) === 'trk-miss'; });
+  var rest = shown.filter(function(r){ return trkStatusClass(trkGet(r, ['Status'])) !== 'trk-miss'; });
+  var ordered = miss.concat(rest);
+  if (!ordered.length) { host.innerHTML = '<div class="trk-empty">' + (dayRows.length ? 'No rows match the search or category.' : 'No rows for this date.') + '</div>'; return; }
+  var vis = ordered.slice(0, trkLimit);
+  var html = '<div class="tbl-wrap"><table class="trk-tbl"><thead><tr><th>SKU / Product</th><th class="n">Prev</th><th class="n">In</th><th class="n">Out (shipped)</th><th class="n">Today</th><th class="n">Gap</th><th>Status</th><th>Notes</th></tr></thead><tbody>';
+  vis.forEach(function(r){
+    var sku = trkGet(r, ['SKU']);
+    var ch = trkNum(trkGet(r, ['App Change']));
+    html += '<tr class="' + trkStatusClass(trkGet(r, ['Status'])) + '">' +
+      '<td><span class="trk-sku" onclick="trkOpenTimeline(this.getAttribute(\'data-sku\'))" data-sku="' + trkEsc(sku) + '">' + trkEsc(sku) + '</span><div style="font-size:10px;color:var(--muted);margin-top:2px">' + trkLabel(r) + '</div></td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['App Prev']))) + '</td>' +
+      '<td class="n">' + (ch !== null && ch > 0 ? '+' + ch.toLocaleString() : '') + '</td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Units Sold']))) + '</td>' +
+      '<td class="n"><b>' + trkFmt(trkNum(trkGet(r, ['App Today']))) + '</b></td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Gap']))) + '</td>' +
+      '<td>' + trkBadge(trkGet(r, ['Status'])) + '</td>' +
+      '<td class="trk-note">' + trkEsc(trkGet(r, ['Notes'])) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  if (ordered.length > vis.length) {
+    html += '<div class="trk-more"><span style="font-size:10px;color:var(--muted);align-self:center">Showing ' + vis.length + ' of ' + ordered.length + '</span>' +
+      '<button class="hbtn" onclick="trkLimit+=50;trkRenderDay()">Show more</button><button class="hbtn" onclick="trkLimit=1e9;trkRenderDay()">Show all</button></div>';
+  } else if (trkLimit > 50 && ordered.length > 50) {
+    html += '<div class="trk-more"><button class="hbtn" onclick="trkLimit=50;trkRenderDay()">Show fewer</button></div>';
+  }
+  host.innerHTML = html;
+}
+
+function trkCountClass(r) {
+  var st = String(trkGet(r, ['Status']) || '').toLowerCase();
+  var diff = trkNum(trkGet(r, ['Difference']));
+  if (st.indexOf('short') >= 0 || (st === '' && diff !== null && diff < 0)) return 'trk-short';
+  if (st.indexOf('over') >= 0 || (st === '' && diff !== null && diff > 0)) return 'trk-over';
+  return '';
+}
+function trkCountTable(rows) {
+  var html = '<div class="tbl-wrap"><table class="trk-tbl"><thead><tr><th>Count date</th><th>SKU / Product</th><th class="n">Expected</th><th class="n">Actual</th><th class="n">Difference</th><th>Status</th><th>Notes</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var cls = trkCountClass(r);
+    var st = trkGet(r, ['Status']);
+    var badge = st ? '<span class="badge ' + (cls === 'trk-short' ? 'b-red' : cls === 'trk-over' ? 'b-amber' : 'b-lime') + '">' + trkEsc(st) + '</span>' : '';
+    html += '<tr class="' + cls + '"><td style="white-space:nowrap">' + trkFmtDate(trkGet(r, ['Count Date'])) + '</td>' +
+      '<td>' + trkEsc(trkGet(r, ['SKU'])) + '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + trkLabel(r) + '</div></td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Expected (App balance)', 'Expected']))) + '</td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Actual Count']))) + '</td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Difference']))) + '</td>' +
+      '<td>' + badge + '</td><td class="trk-note">' + trkEsc(trkGet(r, ['Notes'])) + '</td></tr>';
+  });
+  return html + '</tbody></table></div>';
+}
+function trkRenderWeekly() {
+  var w = document.getElementById('trk-weekly'), h = document.getElementById('trk-history');
+  if (!w || !h || !trkData) return;
+  var q = (document.getElementById('trk-search').value || '').trim(), cat = document.getElementById('trk-cat').value;
+  // Latest count: only rows with an Actual Count entered
+  if (!trkData.weekly.ok) w.innerHTML = '<div class="trk-empty">The Weekly Count tab could not be loaded.</div>';
+  else {
+    var counted = trkData.weekly.rows.filter(function(r){ return trkGet(r, ['Actual Count']) !== ''; });
+    if (!counted.length) w.innerHTML = '<div class="trk-empty">No count entered yet for this week.</div>';
+    else {
+      var cd = counted.map(function(r){ return trkGet(r, ['Count Date']); }).filter(Boolean).sort().reverse()[0] || '';
+      var nShort = counted.filter(function(r){ return trkCountClass(r) === 'trk-short'; }).length;
+      var nOver = counted.filter(function(r){ return trkCountClass(r) === 'trk-over'; }).length;
+      w.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Latest count' + (cd ? ' (' + trkFmtDate(cd) + ')' : '') + ': ' + counted.length + ' items counted, <b style="color:var(--red)">' + nShort + ' short</b>, <b style="color:var(--amber)">' + nOver + ' over</b></div>' +
+        trkCountTable(counted.filter(function(r){ return trkMatches(r, q, cat); }));
+    }
+  }
+  if (!trkData.history.ok) { h.innerHTML = '<div class="trk-empty">The Count History tab could not be loaded.</div>'; return; }
+  var hist = trkData.history.rows.filter(function(r){ return trkMatches(r, q, cat); });
+  hist.sort(function(a, b){ var x = trkGet(a, ['Count Date']), y = trkGet(b, ['Count Date']); return x < y ? 1 : x > y ? -1 : a._row - b._row; });
+  if (!hist.length) { h.innerHTML = '<div class="trk-empty">No past counts yet.</div>'; return; }
+  var vis = hist.slice(0, trkHistLimit);
+  var more = hist.length > vis.length ? '<div class="trk-more"><span style="font-size:10px;color:var(--muted);align-self:center">Showing ' + vis.length + ' of ' + hist.length + '</span><button class="hbtn" onclick="trkHistLimit+=50;trkRenderWeekly()">Show more</button><button class="hbtn" onclick="trkHistLimit=1e9;trkRenderWeekly()">Show all</button></div>' : '';
+  h.innerHTML = trkCountTable(vis) + more;
+}
+
+// ── One SKU across every day ──
+function trkOpenTimeline(sku) {
+  if (!trkData || !trkData.daily.ok) return;
+  var rows = trkData.daily.rows.filter(function(r){ return trkGet(r, ['SKU']) === sku; });
+  rows.sort(function(a, b){ var x = trkGet(a, ['Date']), y = trkGet(b, ['Date']); return x < y ? -1 : x > y ? 1 : a._row - b._row; });
+  document.getElementById('trk-tl-title').textContent = sku;
+  document.getElementById('trk-tl-sub').innerHTML = rows.length ? trkLabel(rows[0]) + ' &middot; ' + rows.length + ' day' + (rows.length === 1 ? '' : 's') : 'No days found';
+  var first = rows.filter(function(r){ var c = trkStatusClass(trkGet(r, ['Status'])); var g = trkNum(trkGet(r, ['Gap'])); return c || (g !== null && g !== 0); })[0];
+  document.getElementById('trk-tl-flag').innerHTML = first
+    ? '<div class="trk-error" style="color:var(--text)">First day with a gap or flag: <b>' + trkFmtDate(trkGet(first, ['Date'])) + '</b> (' + trkEsc(trkGet(first, ['Status']) || 'gap ' + trkGet(first, ['Gap'])) + ')</div>'
+    : '<div class="trk-empty" style="margin-bottom:10px">No gaps or flags on any day.</div>';
+  document.getElementById('trk-tl-chart').innerHTML = trkChart(rows);
+  var html = '<div class="tbl-wrap" style="margin-top:10px"><table class="trk-tbl"><thead><tr><th>Date</th><th class="n">Prev</th><th class="n">In</th><th class="n">Out</th><th class="n">Today</th><th class="n">Gap</th><th>Status</th><th>Notes</th></tr></thead><tbody>';
+  rows.slice().reverse().forEach(function(r){
+    var ch = trkNum(trkGet(r, ['App Change']));
+    html += '<tr class="' + trkStatusClass(trkGet(r, ['Status'])) + '"><td style="white-space:nowrap">' + trkFmtDate(trkGet(r, ['Date'])) + '</td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['App Prev']))) + '</td>' +
+      '<td class="n">' + (ch !== null && ch > 0 ? '+' + ch.toLocaleString() : '') + '</td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Units Sold']))) + '</td>' +
+      '<td class="n"><b>' + trkFmt(trkNum(trkGet(r, ['App Today']))) + '</b></td>' +
+      '<td class="n">' + trkFmt(trkNum(trkGet(r, ['Gap']))) + '</td>' +
+      '<td>' + trkBadge(trkGet(r, ['Status'])) + '</td><td class="trk-note">' + trkEsc(trkGet(r, ['Notes'])) + '</td></tr>';
+  });
+  document.getElementById('trk-tl-table').innerHTML = html + '</tbody></table></div>';
+  document.getElementById('trk-modal').classList.add('open');
+}
+function trkCloseTimeline() { document.getElementById('trk-modal').classList.remove('open'); }
+
+// Simple line chart of the "App Today" balance; flagged days get a coloured dot.
+function trkChart(rows) {
+  var pts = rows.map(function(r){ return { d: trkGet(r, ['Date']), v: trkNum(trkGet(r, ['App Today'])), c: trkStatusClass(trkGet(r, ['Status'])) }; }).filter(function(p){ return p.v !== null; });
+  if (pts.length < 2) return '<div class="trk-empty">' + (pts.length ? 'Only one day so far; the chart starts after the second day.' : 'No balance recorded yet.') + '</div>';
+  var W = 700, H = 200, L = 52, R = 12, T = 14, B = 28;
+  var min = Math.min.apply(null, pts.map(function(p){ return p.v; })), max = Math.max.apply(null, pts.map(function(p){ return p.v; }));
+  if (min === max) { min -= 1; max += 1; }
+  var pad = (max - min) * 0.08; min = Math.max(0, min - pad); max += pad;
+  var x = function(i){ return L + (W - L - R) * i / (pts.length - 1); };
+  var y = function(v){ return T + (H - T - B) * (1 - (v - min) / (max - min)); };
+  var line = pts.map(function(p, i){ return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(p.v).toFixed(1); }).join(' ');
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--border);border-radius:9px" role="img" aria-label="Balance by day">';
+  [0, 0.5, 1].forEach(function(f){
+    var v = min + (max - min) * f, yy = y(v);
+    svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) + '" stroke="var(--border)" stroke-width="1"/>' +
+      '<text x="' + (L - 6) + '" y="' + (yy + 3).toFixed(1) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + Math.round(v).toLocaleString() + '</text>';
+  });
+  svg += '<path d="' + line + '" fill="none" stroke="var(--sky)" stroke-width="2"/>';
+  pts.forEach(function(p, i){
+    var col = p.c === 'trk-miss' ? 'var(--red)' : p.c === 'trk-check' ? 'var(--amber)' : 'var(--sky)';
+    svg += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="' + (p.c ? 4.5 : 2.5) + '" fill="' + col + '"><title>' + trkEsc(p.d) + ': ' + p.v.toLocaleString() + '</title></circle>';
+  });
+  var step = Math.max(1, Math.ceil(pts.length / 6));
+  pts.forEach(function(p, i){
+    if (i % step && i !== pts.length - 1) return;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(p.d);
+    var lab = m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : p.d;
+    svg += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + trkEsc(lab) + '</text>';
+  });
+  return svg + '</svg>';
 }
 
 // ─── SEASON FORECAST ──────────────────────────────────────────────────────────
