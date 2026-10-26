@@ -939,6 +939,12 @@ body:not(.owner-mode) #tab-inventory table td:nth-child(3),
 body:not(.owner-mode) #tab-inventory table th:nth-child(4),
 body:not(.owner-mode) #tab-inventory table td:nth-child(4) { display: none; }
 .owner-only { display: none; }
+/* v125 receive-only access (Daniel): change controls outside receiving and packaging are hidden or locked */
+body.receive-only-mode .ro-hidden { display: none !important; }
+body.receive-only-mode .ro-locked { opacity: .75; cursor: not-allowed; }
+body.receive-only-mode .ro-locked:not(input):not(select):not(textarea) { pointer-events: none; }
+.ro-note { display: none; }
+body.receive-only-mode .ro-note { display: block; font-size: 11px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; margin: 0 0 12px; }
 body.owner-mode .owner-only { display: block; }
 body.owner-mode .team-only  { display: none; }
 
@@ -953,7 +959,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v124</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v125</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -985,6 +991,7 @@ body.owner-mode .team-only  { display: none; }
 
 <!-- ═══════════════════ TAB 1: INVENTORY ═══════════════════ -->
 <div class="page-content on" id="tab-inventory">
+<div class="ro-note">&#x1F441; View only. You can receive shipments and record packaging in the Receiving tab.</div>
 <main>
   <div class="alert" id="alert-bar">
     <div class="alert-dot"></div>
@@ -1106,6 +1113,7 @@ body.owner-mode .team-only  { display: none; }
 
 <!-- ═══════════════════ TAB 2: PIPELINE ═══════════════════ -->
 <div class="page-content" id="tab-pipeline">
+<div class="ro-note">&#x1F441; View only. You can receive shipments and record packaging in the Receiving tab.</div>
 <main>
 
   <!-- Dampener Pipeline -->
@@ -1751,6 +1759,7 @@ body.owner-mode .team-only  { display: none; }
 
 <!-- ═══════════════════ TAB 4: STOCK HISTORY ═══════════════════ -->
 <div class="page-content" id="tab-history">
+<div class="ro-note">&#x1F441; View only. You can receive shipments and record packaging in the Receiving tab.</div>
 <main>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
@@ -1807,6 +1816,7 @@ body.owner-mode .team-only  { display: none; }
 
 <!-- ═══════════════════ TAB: SALES HISTORY ═══════════════════ -->
 <div class="page-content" id="tab-sales">
+<div class="ro-note">&#x1F441; View only. You can receive shipments and record packaging in the Receiving tab.</div>
 <main>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
@@ -8993,7 +9003,8 @@ function loadFromSheets(callback) {
           }
         }
         // Mirror to localStorage so we have a local cache
-        localStorage.setItem('rtp_v7', JSON.stringify(appData));
+        _roLastGood = JSON.stringify(appData);
+        localStorage.setItem('rtp_v7', _roLastGood);
         hideOverlay();
         setSyncStatus('ok', 'Loaded from Google Sheets: ' + new Date().toLocaleTimeString());
         if (callback) callback(true);
@@ -9253,12 +9264,119 @@ document.addEventListener('visibilitychange', function() {
   seatBeat();
 });
 
+// ─── RECEIVE-ONLY ACCESS (v125) ──────────────────────────────────────────────
+// A user with access:'receive' (Daniel) can use the Receive Shipment form and the
+// assembly/packaging forms in the Receiving tab, and change his own PIN. Everything
+// else is view only: Open Orders and Freight Invoices can be seen but not changed,
+// and Inventory, Production Pipeline, Stock History and Sales History are read-only.
+// Layer 1: the controls that change things are hidden or locked for him.
+// Layer 2: the change actions refuse to run for him.
+// Layer 3 (backstop): any save that does not come from an allowed form is refused and
+//          the data on screen goes back to the last saved copy.
+var RECEIVE_ONLY_ALLOWED = ['submitReceiving', 'submitPackaging', 'submitGripPackaging', 'submitAsmDampener',
+  'submitHlpPackaging', 'submitTwlPackaging', 'submitWspPackaging', 'submitPkgDampener', 'handleChangePinStep'];
+var RECEIVE_ONLY_BLOCKED = [
+  // Inventory tab and header
+  'onField', 'onLocation', 'onPkgThreshold', 'saveAll', 'discardChanges', 'deleteItem', 'openModal', 'addProduct',
+  'addUlineItem', 'clearUlineChecks', 'deleteUlineItem', 'toggleUlineCheck', 'updateUlineItem', 'syncShopify',
+  // Production Pipeline
+  'toggleBoxColor', 'confirmBoxRun',
+  // Open Orders and Freight Invoices (view only)
+  'openPlaceOrderModal', 'submitPlaceOrder', 'addPOItemRow', 'editOpenOrder', 'cancelOpenOrder', 'uncancelOpenOrder',
+  'editOrderedQty', 'editReceivedTotal', 'openCloseShortModal', 'submitCloseShort',
+  'openFreightModal', 'submitFreightInvoice', 'deleteFreightInvoice', 'toggleFreightEntry',
+  // Editing or removing past records (corrections)
+  'editReceivingEntry', 'saveEditEntry', 'deleteReceivingEntry', 'clearReceivingHistory', 'clearStockHistory',
+  'crossOutReceivingEntry', 'uncrossReceivingEntry', 'crossOutHistoryEntry', 'uncrossHistoryEntry',
+  'voidPkgEntry', 'unvoidPkgEntry', 'addPkgNote'];
+var _roAllowedDepth = 0;   // above 0 while an allowed form is running
+var _roLastGood = null;    // the data as last loaded or saved, for the backstop
+
+function isReceiveOnly() { return !!(currentUser && currentUser.access === 'receive'); }
+
+function roRefuse() {
+  showAlert('View only: you can receive shipments and record packaging. Nothing was changed.', 'amber');
+}
+
+// Backstop, called by persist(). True means: do not save.
+function receiveOnlyBlocksSave() {
+  if (!isReceiveOnly() || _roAllowedDepth > 0) return false;
+  if (_roLastGood) {
+    try { appData = JSON.parse(_roLastGood); } catch (e) {}
+    try { if (typeof pending !== 'undefined') pending = {}; } catch (e) {}
+    try { if (typeof refreshAfterStockChange === 'function') refreshAfterStockChange(); else renderTable(); } catch (e) {}
+  }
+  roRefuse();
+  return true;
+}
+
+function initReceiveOnlyGuards() {
+  RECEIVE_ONLY_ALLOWED.forEach(function(n) {
+    var f = window[n]; if (typeof f !== 'function') return;
+    window[n] = function() { _roAllowedDepth++; try { return f.apply(this, arguments); } finally { _roAllowedDepth--; } };
+  });
+  RECEIVE_ONLY_BLOCKED.forEach(function(n) {
+    var f = window[n]; if (typeof f !== 'function') return;
+    window[n] = function() {
+      if (isReceiveOnly() && _roAllowedDepth === 0) { roRefuse(); return; }
+      return f.apply(this, arguments);
+    };
+  });
+}
+
+var _roHandlerRe = new RegExp('\\b(' + RECEIVE_ONLY_BLOCKED.join('|') + ')\\s*\\(');
+var _roHandlerAttrs = ['onclick', 'onchange', 'oninput', 'onblur', 'ondblclick', 'onkeydown', 'onkeyup', 'onsubmit'];
+
+// Hide buttons and lock fields whose action is blocked. Runs again whenever the page redraws.
+function applyReceiveOnlyLocks() {
+  if (!isReceiveOnly()) return;
+  var sel = _roHandlerAttrs.map(function(a) { return '[' + a + ']'; }).join(',');
+  document.querySelectorAll(sel).forEach(function(el) {
+    if (el.classList.contains('ro-hidden') || el.classList.contains('ro-locked')) return;
+    var hit = _roHandlerAttrs.some(function(a) { var v = el.getAttribute(a); return v && _roHandlerRe.test(v); });
+    if (!hit) return;
+    var tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') { el.disabled = true; el.classList.add('ro-locked'); }
+    else if (tag === 'BUTTON' || tag === 'A' || el.classList.contains('hbtn') || el.classList.contains('recv-act-btn')) el.classList.add('ro-hidden');
+    else el.classList.add('ro-locked'); // rows, tiles and cells stay visible but do nothing
+  });
+}
+
+function clearReceiveOnlyLocks() {
+  document.querySelectorAll('.ro-locked').forEach(function(el) { el.disabled = false; el.classList.remove('ro-locked'); });
+  document.querySelectorAll('.ro-hidden').forEach(function(el) { el.classList.remove('ro-hidden'); });
+}
+
+var _roObserver = null, _roQueued = false;
+function setReceiveOnlyMode() {
+  var on = isReceiveOnly();
+  document.body.classList.toggle('receive-only-mode', on);
+  var tb = document.getElementById('inv-view-table-btn');
+  if (tb) tb.textContent = on ? 'Table' : 'Table (edit stock)';
+  if (on) {
+    applyReceiveOnlyLocks();
+    if (!_roObserver && window.MutationObserver) {
+      _roObserver = new MutationObserver(function() {
+        if (_roQueued) return; _roQueued = true;
+        setTimeout(function() { _roQueued = false; applyReceiveOnlyLocks(); }, 0);
+      });
+      _roObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  } else {
+    if (_roObserver) { _roObserver.disconnect(); _roObserver = null; }
+    clearReceiveOnlyLocks();
+  }
+}
+
 // Override persist to also sync to Sheets
 var _originalPersist = null;
 function initSheetsSync() {
   _originalPersist = persist;
   persist = function(d) {
-    localStorage.setItem('rtp_v7', JSON.stringify(d)); // always save locally first
+    if (receiveOnlyBlocksSave()) return;                // v125: view-only change refused and undone
+    var json = JSON.stringify(d);
+    localStorage.setItem('rtp_v7', json);               // always save locally first
+    _roLastGood = json;
     saveToSheets();                                      // then push to Sheets
   };
 }
@@ -9963,7 +10081,7 @@ function showAlert(msg, color) {
 // ─── USER SYSTEM ─────────────────────────────────────────────────────────────
 var USERS = [
   { name: 'Sky',    role: 'owner', password: true, pin: '0903' },
-  { name: 'Daniel', role: 'team',  pin: '1015' },
+  { name: 'Daniel', role: 'team',  pin: '1015', access: 'receive' }, // v125: receives and packages only; every other tab is view only
   { name: 'SJ',     role: 'team',  pin: '1015', retired: true }, // Retired Oct 2026: cannot sign in. Past records keep the name.
   { name: 'Support', role: 'team', pin: '2026' },
 ];
@@ -10012,6 +10130,7 @@ function initUserSystem() {
     if (_seatMode === 'seat' && seatAlreadyGone !== true) seatRequest('release', null, null, true); // frees the seat for the next person
     currentUser = null;
     document.body.classList.remove('owner-mode');
+    setReceiveOnlyMode();
     showLoginScreen();
     loginPinBuffer = '';
     shuffleLoginKeys();
@@ -10296,6 +10415,7 @@ function saveNewPassword() {
 function applyUserRole() {
   var isOwner = currentUser && currentUser.role === 'owner';
   document.body.classList.toggle('owner-mode', isOwner);
+  setReceiveOnlyMode();
   updateUserBadge();
   var byEl = document.getElementById('recv-by');
   if (byEl && currentUser) byEl.value = currentUser.name;
@@ -11304,6 +11424,7 @@ var todayISO = todayLA();
 document.getElementById('recv-date').value = todayISO;
 document.getElementById('sync-meta').textContent = '60-day Shopify data — reorder point = daily x lead — MOQ-aware';
 initSheetsSync(); // wrap persist to also push to Sheets
+initReceiveOnlyGuards(); // v125: Daniel receives and packages only
 // Build the sign-in keypad right away so login never depends on the data load finishing.
 try { shuffleLoginKeys(); updateLoginDots(); } catch(e) { console.error('login keypad init', e); }
 setTimeout(function(){
