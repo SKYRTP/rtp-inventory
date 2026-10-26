@@ -953,7 +953,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v123</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v124</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -8923,6 +8923,7 @@ function lockEditing(locked) {
 // in the middle of someone else's save) from overwriting the Sheet with its old local copy.
 var _sheetLoadedOk = false;
 var _lastLoadedJson = null;   // the exact data last loaded from the Sheet, for Download backup
+var _sheetVersion = null;     // v124: the save number of the data this device loaded (Apps Script v6+)
 
 function loadFromSheets(callback) {
   if (!SHEETS_URL) {
@@ -8941,6 +8942,7 @@ function loadFromSheets(callback) {
     .then(function(res) {
       if (res.ok && res.data && Object.keys(res.data).length > 0) {
         _sheetLoadedOk = true;
+        _sheetVersion = (res.version !== undefined && res.version !== null) ? Number(res.version) : null;
         try { _lastLoadedJson = JSON.stringify(res.data); } catch (e) { _lastLoadedJson = null; }
         // Sheet data wins — completely replace appData
         appData = res.data;
@@ -9078,7 +9080,9 @@ function saveToSheets(callback) {
   lockEditing(true);
   fetch(SHEETS_URL, {
     method: 'POST',
-    body: JSON.stringify({ data: appData }),
+    // device, user and baseVersion let Apps Script v6 refuse saves from a device that is not
+    // signed in or that holds an older copy. Apps Script v5 ignores them.
+    body: JSON.stringify({ data: appData, device: seatDeviceId(), user: currentUser ? currentUser.name : '', baseVersion: _sheetVersion }),
     headers: { 'Content-Type': 'text/plain' },
     redirect: 'follow'
   })
@@ -9088,13 +9092,16 @@ function saveToSheets(callback) {
       window._sheetsSaving = false;
       lockEditing(false);
       if (res.ok) {
+        if (res.version !== undefined && res.version !== null) _sheetVersion = Number(res.version);
         setSyncStatus('ok', 'Saved to Sheets: ' + new Date().toLocaleTimeString());
         if (pendingSave) {
           pendingSave = false;
           saveToSheets();
         }
       } else {
+        pendingSave = false;
         setSyncStatus('err', 'Save failed: ' + (res.error || 'unknown'));
+        onSaveRefused(res);
       }
       if (callback) callback(res.ok);
     })
@@ -9106,6 +9113,145 @@ function saveToSheets(callback) {
       if (callback) callback(false);
     });
 }
+
+// ─── ONE PERSON AT A TIME (v124, needs Apps Script v6) ──────────────────────
+// Apps Script v6 keeps one "seat". Signing in takes it, signing out (or 5 minutes
+// idle) frees it, and a device that goes quiet loses it after 7 minutes. Saves from
+// a device without the seat, or holding an older copy, are refused by the script.
+// All seat requests are GET requests on purpose: Apps Script v5 answers any GET with
+// the data (harmless), whereas an unknown POST to v5 would be treated as a save.
+// So if v6 is not deployed yet, the app notices and works exactly as before.
+var _seatMode = 'unknown';   // 'seat' (v6 answered) | 'legacy' (v5 answered) | 'unknown'
+var _seatBeatTimer = null;
+var _pendingLoginUser = null; // the person who just passed the PIN/password but was blocked
+
+function seatDeviceId() {
+  // One id per browser window, kept across a reload of that window.
+  if (window._seatDevice) return window._seatDevice;
+  var id = null;
+  try { id = sessionStorage.getItem('rtp_seat_device'); } catch (e) {}
+  if (!id) {
+    id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    try { sessionStorage.setItem('rtp_seat_device', id); } catch (e) {}
+  }
+  window._seatDevice = id;
+  return id;
+}
+
+function seatRequest(action, extra, cb, keepalive) {
+  if (!SHEETS_URL) { cb && cb('legacy', null); return; }
+  var q = '?type=session&action=' + encodeURIComponent(action) +
+          '&device=' + encodeURIComponent(seatDeviceId()) +
+          '&user=' + encodeURIComponent((extra && extra.user) || (currentUser ? currentUser.name : '')) +
+          ((extra && extra.force) ? '&force=1' : '') + '&t=' + Date.now();
+  var opts = { method: 'GET', redirect: 'follow', cache: 'no-store' };
+  if (keepalive) opts.keepalive = true;
+  fetch(SHEETS_URL + q, opts)
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res && res.ok && res.session) { _seatMode = 'seat'; cb && cb('seat', res.session); }
+      else if (res && res.ok && res.data !== undefined) { _seatMode = 'legacy'; cb && cb('legacy', null); }
+      else cb && cb('error', res);
+    })
+    .catch(function(err) { cb && cb('error', { error: err && err.message }); });
+}
+
+function minutesAgo(then, now) {
+  var m = Math.max(0, Math.round((Number(now) - Number(then)) / 60000));
+  return m === 0 ? 'just now' : (m === 1 ? '1 min ago' : m + ' min ago');
+}
+
+function showSeatMessage(html) {
+  var el = document.getElementById('login-seat');
+  if (!el) return;
+  el.innerHTML = html || '';
+  el.style.display = html ? '' : 'none';
+}
+
+function seatBlockedMessage(user, holder, now) {
+  var who = holder && holder.user ? holder.user : 'Someone';
+  var sameName = holder && holder.user === user.name;
+  var safeWho = document.createElement('span'); safeWho.textContent = who;
+  var html = '<b>' + (sameName ? 'You are already signed in on another device or window' : safeWho.innerHTML + ' is using the app right now') + '</b>' +
+    '<br><span style="color:var(--muted)">Last active ' + minutesAgo(holder && holder.last, now) + '. ' +
+    (sameName ? 'Sign out there first, or take over here.' : 'Try again when they sign out. The app frees up by itself after 5 minutes with no activity.') + '</span>';
+  if (user.role === 'owner' || sameName) {
+    html += '<br><button class="hbtn primary" onclick="seatTakeOver()" style="margin-top:10px">Take over' + (sameName ? '' : ' (signs ' + safeWho.innerHTML + ' out)') + '</button>';
+  }
+  html += '<br><button class="hbtn" onclick="seatTryAgain()" style="margin-top:8px">Try again</button>';
+  return html;
+}
+
+// The buttons on the "someone is using the app" message only work for 2 minutes after
+// the PIN or password was entered; after that it must be entered again.
+function seatPendingValid() {
+  if (_pendingLoginUser && Date.now() - (window._pendingLoginAt || 0) < 2 * 60 * 1000) return true;
+  _pendingLoginUser = null; showSeatMessage('');
+  var e = document.getElementById('login-error'); if (e) e.textContent = 'Please enter your PIN or password again.';
+  return false;
+}
+function seatTakeOver() {
+  if (!seatPendingValid()) return;
+  var u = _pendingLoginUser;
+  var holderName = window._seatHolderName || 'the other person';
+  var sameName = holderName === u.name;
+  if (!(u.role === 'owner' || sameName)) return;
+  if (!confirm(sameName ? 'Sign in here and sign out your other device or window?' : 'Take over and sign ' + holderName + ' out? Anything they are typing that is not saved yet will be lost.')) return;
+  finishLogin(u, { force: true });
+}
+function seatTryAgain() { if (seatPendingValid()) finishLogin(_pendingLoginUser); }
+
+function seatStartBeat() {
+  clearInterval(_seatBeatTimer);
+  if (_seatMode !== 'seat') return;
+  _seatBeatTimer = setInterval(seatBeat, 60 * 1000);
+}
+function seatStopBeat() { clearInterval(_seatBeatTimer); _seatBeatTimer = null; }
+
+function seatBeat() {
+  if (!currentUser || _seatMode !== 'seat') return;
+  if (document.visibilityState === 'hidden') return;
+  seatRequest('beat', null, function(kind, session) {
+    if (kind === 'seat' && session && session.ok === false && session.lost) seatLost(session.holder);
+  });
+}
+
+// This device no longer holds the seat (someone took over, or it went quiet too long).
+function seatLost(holder) {
+  if (!currentUser) return;
+  _sheetLoadedOk = false; // never save from here again until a fresh sign-in
+  var who = holder && holder.user ? holder.user : '';
+  if (window._lockApp) window._lockApp(true);
+  var e = document.getElementById('login-error'); if (e) e.textContent = '';
+  var safe = document.createElement('span'); safe.textContent = who;
+  showSeatMessage('<b>You were signed out</b><br><span style="color:var(--muted)">' +
+    (who ? safe.innerHTML + ' signed in on another device.' : 'This device was inactive for too long, so the app was freed for others.') +
+    ' Sign in again to keep working.</span>');
+}
+
+// Apps Script v6 refused a save. Stop saving from this device and say why.
+function onSaveRefused(res) {
+  if (!res || !res.code) return;
+  _sheetLoadedOk = false;
+  if (res.code === 'not_holder') {
+    seatLost(res.holder);
+    var e = document.getElementById('login-error'); if (e) e.textContent = 'Your last change was NOT saved.';
+    return;
+  }
+  var msg = res.code === 'stale'
+    ? '<b style="color:var(--red)">Your last change was NOT saved</b><br>Someone else saved changes after this device loaded the data. Tap Reload to get the latest data, then do your change again.'
+    : res.code === 'old_app'
+    ? '<b style="color:var(--red)">This copy of the app is out of date</b><br>Close the app fully and open it again.'
+    : '<b style="color:var(--red)">Your last change was NOT saved</b><br>' + (function(){ var d = document.createElement('div'); d.textContent = res.error || 'The Sheet refused the save.'; return d.innerHTML; })();
+  showOverlay(msg + '<br><button class="hbtn primary" onclick="retrySheetConnect()" style="margin-top:10px">Reload</button>');
+}
+
+// Coming back to the app (phone unlocked, tab reopened): check the seat straight away.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState !== 'visible' || !currentUser) return;
+  if (window._checkIdleNow && window._checkIdleNow()) return; // idle too long: signed out
+  seatBeat();
+});
 
 // Override persist to also sync to Sheets
 var _originalPersist = null;
@@ -9841,18 +9987,29 @@ function initUserSystem() {
   // ── Auto-lock after 5 minutes of inactivity ──────────────────────────────
   var INACTIVITY_MS = 5 * 60 * 1000;
   var inactivityTimer = null;
+  var lastActivity = Date.now();
 
   function resetInactivityTimer() {
     if (!currentUser) return;
+    lastActivity = Date.now();
     clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(function() {
       lockApp();
     }, INACTIVITY_MS);
   }
 
-  function lockApp() {
+  // Phones pause timers in the background, so also check the clock on return.
+  window._checkIdleNow = function() {
+    if (currentUser && Date.now() - lastActivity >= INACTIVITY_MS) { lockApp(); return true; }
+    return false;
+  };
+
+  // seatAlreadyGone: true when the seat was already lost, so there is nothing to free.
+  function lockApp(seatAlreadyGone) {
     if (!currentUser) return;
     clearTimeout(inactivityTimer);
+    seatStopBeat();
+    if (_seatMode === 'seat' && seatAlreadyGone !== true) seatRequest('release', null, null, true); // frees the seat for the next person
     currentUser = null;
     document.body.classList.remove('owner-mode');
     showLoginScreen();
@@ -9868,6 +10025,8 @@ function initUserSystem() {
 
   // Lock only when page is being unloaded (navigating away from the URL entirely)
   window.addEventListener('pagehide', function() { lockApp(); });
+  // Fallback for the 5-minute idle timer if a phone paused it.
+  setInterval(function(){ if (window._checkIdleNow) window._checkIdleNow(); }, 30 * 1000);
 
   // Expose for logout button
   window._lockApp = lockApp;
@@ -9981,7 +10140,41 @@ function shakeLoginBox() {
 
 // Everything that happens once someone is signed in, for keypad and password alike.
 // It always reloads fresh data from the Sheet, so a signed-in device never works on old data.
-function finishLogin(user) {
+function finishLogin(user, opts) {
+  opts = opts || {};
+  var errEl = document.getElementById('login-error');
+  _pendingLoginUser = user; window._pendingLoginAt = Date.now();
+  showSeatMessage('');
+  if (errEl) errEl.textContent = 'Signing in...';
+  seatRequest('acquire', { user: user.name, force: !!opts.force }, function(kind, session) {
+    if (kind === 'seat' && session && session.ok) {
+      if (errEl) errEl.textContent = '';
+      _pendingLoginUser = null;
+      enterApp(user);
+      seatStartBeat();
+      if (session.tookOverFrom && session.tookOverFrom.user) showAlert('Signed in. ' + session.tookOverFrom.user + ' was signed out.', 'amber');
+      if (opts.onEntered) opts.onEntered();
+    } else if (kind === 'seat') {
+      if (errEl) errEl.textContent = '';
+      window._seatHolderName = session && session.holder ? session.holder.user : '';
+      showSeatMessage(seatBlockedMessage(user, session && session.holder, session && session.now));
+      loginPinBuffer = ''; updateLoginDots();
+      var pw = document.getElementById('login-pass'); if (pw) pw.value = '';
+    } else if (kind === 'legacy') {
+      // Apps Script v6 is not deployed yet: sign in as before (no one-at-a-time rule).
+      if (errEl) errEl.textContent = '';
+      _pendingLoginUser = null;
+      enterApp(user);
+      if (user.role === 'owner') setTimeout(function(){ showAlert('One person at a time is not on yet: update the Apps Script to v6.', 'amber'); }, 1500);
+      if (opts.onEntered) opts.onEntered();
+    } else {
+      if (errEl) errEl.textContent = 'Could not check who is signed in. Check the internet and try again.';
+      loginPinBuffer = ''; updateLoginDots();
+    }
+  });
+}
+
+function enterApp(user) {
     currentUser = user;
     rememberLastUser(user.name);
     hideLoginScreen();
@@ -10021,6 +10214,8 @@ function onLoginUserChange() {
   var pu = document.getElementById('login-pass-user'); if (pu && user) pu.value = user.name;
   var pw = document.getElementById('login-pass'); if (pw) pw.value = '';
   document.getElementById('login-error').textContent = '';
+  showSeatMessage('');
+  _pendingLoginUser = null;
 }
 
 function bytesToHex(buf) {
@@ -10055,7 +10250,7 @@ function checkPasswordLogin() {
   if (!rec) {
     // No password set yet: the current PIN signs in this once, then a password is required.
     var validPin = (appData.userPins && appData.userPins[name]) || user.pin;
-    if (typed === validPin) { pwEl.value = ''; finishLogin(user); setTimeout(function(){ openChangePassModal(true); }, 400); }
+    if (typed === validPin) { pwEl.value = ''; finishLogin(user, { onEntered: function(){ setTimeout(function(){ openChangePassModal(true); }, 400); } }); }
     else { errEl.textContent = 'Incorrect password, try again'; pwEl.value = ''; shakeLoginBox(); }
     return;
   }
@@ -11448,6 +11643,7 @@ setTimeout(function(){
       <button type="submit" class="hbtn primary" style="width:100%;padding:11px;font-size:13px">Sign in</button>
     </form>
     <div class="login-error" id="login-error"></div>
+    <div id="login-seat" style="display:none;font-size:13px;line-height:1.45;margin-top:8px;text-align:center"></div>
     <div id="login-version" style="font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:.5px"></div>
   </div>
 </div>
