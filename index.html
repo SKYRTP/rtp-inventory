@@ -959,7 +959,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v125</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v126</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -3463,6 +3463,17 @@ function renderVendorPay() {
     '<th style="text-align:left">Date</th><th style="text-align:left">Done by</th><th style="text-align:left">Work</th><th style="text-align:right">Qty</th>' +
     (owner ? '<th style="text-align:right">Rate</th><th style="text-align:right">One-off</th><th style="text-align:right">Total</th><th style="text-align:center">Settled</th>' : '') +
     '<th style="text-align:left;padding-left:16px">Logged by</th></tr></thead><tbody>';
+  // v126: each job's coverage, worked out the same way as "What the money covers",
+  // so a job your recorded payments already pay for shows Covered instead of a box.
+  var coverOf = new Map();
+  if (owner) {
+    var seenV = {};
+    rows.forEach(function(x){
+      var v = x.e.doneBy;
+      if (seenV[v]) return; seenV[v] = 1;
+      vendorLedger(v).jobs.forEach(function(j){ coverOf.set(j.e, j._cover); });
+    });
+  }
   var jobLimit = window._vpJobLimit || 25;
   var totalRows = rows.length;
   var shown = rows.slice(0, jobLimit);
@@ -3486,14 +3497,20 @@ function renderVendorPay() {
             ' onchange="setEntryPriceInline(\'' + x.log + '\',\'' + e.id + '\',this.value)"' +
             ' onkeydown="if(event.key===\'Enter\')this.blur()"></td>' +
         '<td style="text-align:right;font-weight:700;white-space:nowrap;padding-right:6px">' + (amt != null ? money(amt) : '\u2014') + '</td>' +
-        '<td style="text-align:center" title="Tick if this job was already paid outside this account">' +
-          '<input type="checkbox" ' + (e.settled ? 'checked' : '') + ' onchange="toggleJobSettled(\'' + x.log + '\',\'' + e.id + '\')" style="width:15px;height:15px;cursor:pointer">' +
-        '</td>'
+        (function(){
+          var cv = coverOf.get(e);
+          if (!e.settled && cv === 'covered') return '<td style="text-align:center;color:var(--lime);font-weight:700;font-size:10px;white-space:nowrap" title="Paid by the payments you recorded for this vendor">&#x2713; Covered</td>';
+          if (!e.settled && cv === 'partial') return '<td style="text-align:center;color:var(--amber);font-weight:700;font-size:10px;line-height:1.2" title="Partly paid by the payments you recorded. Record a payment to cover the rest.">Part covered</td>';
+          return '<td style="text-align:center" title="Tick only if this job was paid some other way, outside the payments recorded here">' +
+            '<input type="checkbox" ' + (e.settled ? 'checked' : '') + ' onchange="toggleJobSettled(\'' + x.log + '\',\'' + e.id + '\')" style="width:15px;height:15px;cursor:pointer">' +
+          '</td>';
+        })()
         : '') +
       '<td style="text-align:left;color:var(--muted);font-size:10px;padding-left:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (e.by || '\u2014') + '</td>' +
     '</tr>';
   });
   h += '</tbody></table></div>';
+  if (owner) h += '<div style="margin-top:6px;font-size:10px;color:var(--muted)"><span style="color:var(--lime);font-weight:700">&#x2713; Covered</span> means the payments you recorded already pay for that job. Tick Settled only for a job you paid some other way.</div>';
   if (totalRows > shown.length) {
     var left = totalRows - shown.length;
     h += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
