@@ -639,6 +639,17 @@ body.theme-dark .dmp-assembled-label{color:var(--lime-dim);}
 .trk-empty{font-size:11px;color:var(--muted);padding:12px;background:var(--card);border:1px solid var(--border);border-radius:9px}
 .trk-more{display:flex;gap:6px;justify-content:center;margin:8px 0}
 @media (max-width: 960px){ .trk-cards{grid-template-columns:repeat(2,1fr)} .trk-controls .rfselect{min-width:0;width:100%} .trk-controls > div{flex:1 1 100%} }
+.lb-short { display: none }
+/* v127: Inventory by Product Line fits a phone screen (no sideways scroll, no bars over the amounts) */
+@media (max-width: 600px) {
+  .lb-tbl .lb-long { display: none }
+  .lb-tbl .lb-short { display: inline }
+  .lb-tbl .lb-bar { display: none !important }
+  .lb-tbl .lb-pct { min-width: 0 !important }
+  .lb-tbl th, .lb-tbl td { padding: 6px 4px !important; letter-spacing: 0 !important; white-space: nowrap }
+  .lb-tbl th { font-size: 9px !important }
+  .lb-tbl td:first-child { white-space: normal }
+}
 .mobile-only { display: none }
 .phone-only { display: none }
 .desktop-only { display: block }
@@ -959,7 +970,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v126</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v127</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -3578,9 +3589,9 @@ function renderLineBreakdown() {
   var h = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
     '<div style="font-size:12px;font-weight:700;color:var(--text)">Inventory by Product Line</div>' +
     '<div style="font-size:10px;color:var(--muted)">raw, work in progress, finished and that line\'s packaging, combined</div></div>';
-  h += '<div style="overflow-x:auto"><table class="inv-tbl" style="width:100%;font-size:11px"><thead><tr>' +
-    '<th style="text-align:left">Product line</th><th>SKUs</th><th>Units on hand</th>' +
-    (owner ? '<th>Value at cost</th><th>Share</th>' : '') + '</tr></thead><tbody>';
+  h += '<div style="overflow-x:auto"><table class="inv-tbl lb-tbl" style="width:100%;font-size:11px"><thead><tr>' +
+    '<th style="text-align:left">Product line</th><th>SKUs</th><th><span class="lb-long">Units on hand</span><span class="lb-short">Units</span></th>' +
+    (owner ? '<th><span class="lb-long">Value at cost</span><span class="lb-short">Value</span></th><th>Share</th>' : '') + '</tr></thead><tbody>';
   names.forEach(function(n){
     var o = lines[n], m = LINE_META[n] || {icon:'', color:'var(--muted)'};
     var pct = grandVal > 0 ? (o.val / grandVal * 100) : 0;
@@ -3592,9 +3603,9 @@ function renderLineBreakdown() {
       (owner ? '<td style="text-align:right;font-weight:600">' + (o.hasVal ? money(o.val) : '\u2014') + '</td>' +
         '<td style="text-align:right;color:var(--muted)">' +
           '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">' +
-            '<div style="flex:0 0 60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+            '<div class="lb-bar" style="flex:0 0 60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
               '<div style="width:' + pct.toFixed(0) + '%;height:100%;background:' + m.color + '"></div></div>' +
-            '<span style="min-width:34px">' + pct.toFixed(0) + '%</span></div></td>' : '') +
+            '<span class="lb-pct" style="min-width:34px">' + pct.toFixed(0) + '%</span></div></td>' : '') +
     '</tr>';
   });
   h += '<tr style="border-top:2px solid var(--border)">' +
