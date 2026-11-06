@@ -970,7 +970,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v127</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v128</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -3573,47 +3573,75 @@ function renderLineBreakdown() {
   if (!host) return;
   var rows = getAllProducts();
   var owner = !!(currentUser && currentUser.role === 'owner');
-  var lines = {}, grandVal = 0, grandUnits = 0, grandSkus = 0, anyCost = false;
+  // v128: each line is split into the product itself (PD- and RAW- SKUs: raw, in progress
+  // and finished) and its packaging and boxes (PKG- SKUs), so units are never added across
+  // socks and boxes. The SKU prefix is used because categories do not separate them cleanly.
+  function blank(){ return {val:0, units:0, skus:0, hasVal:false, noCost:0}; }
+  var lines = {}, grandVal = 0, anyCost = false, tot = {prod: blank(), pkg: blank()};
   rows.forEach(function(r){
     var L = productLineOf(r);
-    if (!lines[L]) lines[L] = {val:0, units:0, skus:0, hasVal:false};
-    var o = lines[L];
-    o.skus++; grandSkus++;
-    if (typeof r.stock === 'number' && isFinite(r.stock)) { o.units += r.stock; grandUnits += r.stock; }
+    if (!lines[L]) lines[L] = {prod: blank(), pkg: blank(), val: 0, units: 0};
+    var part = /^PKG-/i.test(r.sku || '') ? 'pkg' : 'prod';
+    [lines[L][part], tot[part]].forEach(function(o){
+      o.skus++;
+      var hasStock = (typeof r.stock === 'number' && isFinite(r.stock));
+      if (hasStock) o.units += r.stock;
+      if (r.invValue !== null && r.invValue !== undefined && isFinite(r.invValue)) { o.val += r.invValue; o.hasVal = true; }
+      else if (hasStock && r.stock > 0) o.noCost++;
+    });
     if (r.invValue !== null && r.invValue !== undefined && isFinite(r.invValue)) {
-      o.val += r.invValue; grandVal += r.invValue; o.hasVal = true; anyCost = true;
+      lines[L].val += r.invValue; grandVal += r.invValue; anyCost = true;
     }
+    if (typeof r.stock === 'number' && isFinite(r.stock)) lines[L].units += r.stock;
   });
   var names = Object.keys(lines).sort(function(a,b){ return lines[b].val - lines[a].val || lines[b].units - lines[a].units; });
   function money(v){ return '$' + Math.round(v).toLocaleString(); }
-  var h = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
+  function noCostNote(o){
+    return (owner && o.noCost) ? ' <span style="font-size:9px;color:var(--amber);font-weight:700;white-space:nowrap" title="These SKUs have stock but no cost, so they are not in the value">' + o.noCost + ' no cost</span>' : '';
+  }
+  function cells(o, color, bold){
+    var pct = grandVal > 0 ? (o.val / grandVal * 100) : 0;
+    var w = bold ? 'font-weight:700;' : '';
+    return '<td style="text-align:center;color:var(--muted)">' + o.skus + '</td>' +
+      '<td style="text-align:right;' + w + '">' + Math.round(o.units).toLocaleString() + '</td>' +
+      (owner ? '<td style="text-align:right;' + (bold ? 'font-weight:700' : 'font-weight:600') + '">' + (o.hasVal ? money(o.val) : '-') + '</td>' +
+        '<td style="text-align:right;color:var(--muted)">' +
+          '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">' +
+            (color ? '<div class="lb-bar" style="flex:0 0 60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+              '<div style="width:' + pct.toFixed(0) + '%;height:100%;background:' + color + '"></div></div>' : '') +
+            '<span class="lb-pct" style="min-width:34px">' + pct.toFixed(0) + '%</span></div></td>' : '');
+  }
+  var h = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px">' +
     '<div style="font-size:12px;font-weight:700;color:var(--text)">Inventory by Product Line</div>' +
-    '<div style="font-size:10px;color:var(--muted)">raw, work in progress, finished and that line\'s packaging, combined</div></div>';
+    '<div style="font-size:10px;color:var(--muted)">product (raw, in progress and finished), with each line\'s packaging and boxes on the row below it</div></div>';
   h += '<div style="overflow-x:auto"><table class="inv-tbl lb-tbl" style="width:100%;font-size:11px"><thead><tr>' +
     '<th style="text-align:left">Product line</th><th>SKUs</th><th><span class="lb-long">Units on hand</span><span class="lb-short">Units</span></th>' +
     (owner ? '<th><span class="lb-long">Value at cost</span><span class="lb-short">Value</span></th><th>Share</th>' : '') + '</tr></thead><tbody>';
   names.forEach(function(n){
     var o = lines[n], m = LINE_META[n] || {icon:'', color:'var(--muted)'};
-    var pct = grandVal > 0 ? (o.val / grandVal * 100) : 0;
-    h += '<tr>' +
-      '<td style="text-align:left"><span style="display:inline-block;width:3px;height:12px;background:' + m.color + ';border-radius:2px;vertical-align:middle;margin-right:7px"></span>' +
-        m.icon + ' <b>' + n + '</b></td>' +
-      '<td style="text-align:center;color:var(--muted)">' + o.skus + '</td>' +
-      '<td style="text-align:right">' + Math.round(o.units).toLocaleString() + '</td>' +
-      (owner ? '<td style="text-align:right;font-weight:600">' + (o.hasVal ? money(o.val) : '\u2014') + '</td>' +
-        '<td style="text-align:right;color:var(--muted)">' +
-          '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">' +
-            '<div class="lb-bar" style="flex:0 0 60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
-              '<div style="width:' + pct.toFixed(0) + '%;height:100%;background:' + m.color + '"></div></div>' +
-            '<span class="lb-pct" style="min-width:34px">' + pct.toFixed(0) + '%</span></div></td>' : '') +
-    '</tr>';
+    if (o.prod.skus) {
+      h += '<tr>' +
+        '<td style="text-align:left"><span style="display:inline-block;width:3px;height:12px;background:' + m.color + ';border-radius:2px;vertical-align:middle;margin-right:7px"></span>' +
+          m.icon + ' <b>' + n + '</b>' + noCostNote(o.prod) + '</td>' + cells(o.prod, m.color, false) + '</tr>';
+    } else {
+      h += '<tr><td style="text-align:left" colspan="' + (owner ? 5 : 3) + '"><span style="display:inline-block;width:3px;height:12px;background:' + m.color + ';border-radius:2px;vertical-align:middle;margin-right:7px"></span>' +
+        m.icon + ' <b>' + n + '</b></td></tr>';
+    }
+    if (o.pkg.skus) {
+      h += '<tr class="lb-pkg" style="color:var(--text-dim)">' +
+        '<td style="text-align:left;padding-left:22px;font-size:10px">↳ Packaging &amp; boxes' + noCostNote(o.pkg) + '</td>' + cells(o.pkg, null, false) + '</tr>';
+    }
   });
-  h += '<tr style="border-top:2px solid var(--border)">' +
-    '<td style="text-align:left;font-weight:700">TOTAL</td>' +
-    '<td style="text-align:center;font-weight:700">' + grandSkus + '</td>' +
-    '<td style="text-align:right;font-weight:700">' + Math.round(grandUnits).toLocaleString() + '</td>' +
-    (owner ? '<td style="text-align:right;font-weight:700">' + (anyCost ? money(grandVal) : '\u2014') + '</td><td></td>' : '') +
-    '</tr></tbody></table></div>';
+  h += '<tr style="border-top:2px solid var(--border)"><td style="text-align:left;font-weight:700">Product total' + noCostNote(tot.prod) + '</td>' + cells(tot.prod, null, true) + '</tr>';
+  h += '<tr><td style="text-align:left;font-weight:700">Packaging &amp; boxes total' + noCostNote(tot.pkg) + '</td>' + cells(tot.pkg, null, true) + '</tr>';
+  if (owner) {
+    h += '<tr style="border-top:2px solid var(--border)"><td style="text-align:left;font-weight:700">TOTAL VALUE</td>' +
+      '<td></td><td></td><td style="text-align:right;font-weight:700">' + (anyCost ? money(grandVal) : '-') + '</td><td></td></tr>';
+  }
+  h += '</tbody></table></div>';
+  if (owner && (tot.prod.noCost || tot.pkg.noCost)) {
+    h += '<div style="margin-top:6px;font-size:10px;color:var(--muted)"><span style="color:var(--amber);font-weight:700">No cost</span> means those SKUs have stock but no cost entered, so their units are counted but they add nothing to the value.</div>';
+  }
   host.innerHTML = h;
 }
 
