@@ -970,7 +970,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v128</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v129</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -1842,6 +1842,7 @@ body.owner-mode .team-only  { display: none; }
   </div>
 
   <div id="sales-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px"></div>
+  <div id="sales-cogs-cat" class="owner-only" style="margin-bottom:14px"></div>
 
   <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
     <div style="font-family:'Fraunces',serif;font-size:14px;font-weight:600;margin-bottom:10px">Top Movers</div>
@@ -6112,6 +6113,10 @@ function renderSalesHistory() {
         (isOwner ? cogsCard : '') +
         (prev ? card('Units vs ' + prev.date, diffStr, 'change in 60d demand', diffColor) : card('Comparison', '—', 'pick a previous snapshot'));
 
+      // v129: COGS broken down by product line (same lines as the Inventory tab).
+      var catEl = document.getElementById('sales-cogs-cat');
+      if (catEl) catEl.innerHTML = isOwner ? cogsByCategoryHtml(cur, prev, costOf, fmt$) : '';
+
       // Top movers (biggest gainers + biggest losers)
       var allSkus = {};
       Object.keys(curMap).forEach(function(k){ allSkus[k]=true; });
@@ -6187,6 +6192,58 @@ function renderSalesHistory() {
       renderWith(SALES_SNAPSHOTS);
     });
   }
+}
+
+// v129: units sold and COGS per product line for a Shopify snapshot (and the previous one,
+// if picked). Uses the same cost lookup as the Total COGS card, so the rows always add up
+// to that card. A SKU sold that is not in the product list at all is grouped as "Not in inventory list".
+function cogsByCategoryHtml(cur, prev, costOf, fmt$) {
+  // Every catalog item, hidden ones included: a hidden SKU can still have sales.
+  var lineOf = {};
+  PRODUCTS.concat(PACKAGING).concat(appData.custom || []).forEach(function(r){ if (r && r.sku && !lineOf[r.sku]) lineOf[r.sku] = productLineOf(r); });
+  var cats = {}, totCur = 0, totPrev = 0, totUnits = 0;
+  function bucket(name){ if (!cats[name]) cats[name] = {units:0, cogs:0, prev:0, missing:0}; return cats[name]; }
+  cur.data.forEach(function(r){
+    var b = bucket(lineOf[r[0]] || 'Not in inventory list');
+    var c = costOf(r[0], r[1]);
+    b.units += r[1]; totUnits += r[1];
+    if (c === null) b.missing++; else { b.cogs += c; totCur += c; }
+  });
+  if (prev) prev.data.forEach(function(r){
+    var b = bucket(lineOf[r[0]] || 'Not in inventory list');
+    var c = costOf(r[0], r[1]);
+    if (c !== null) { b.prev += c; totPrev += c; }
+  });
+  var names = Object.keys(cats).sort(function(a,b){ return cats[b].cogs - cats[a].cogs || cats[b].units - cats[a].units; });
+  var th = 'style="text-align:right"';
+  var h = '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">' +
+    '<div style="font-family:\'Fraunces\',serif;font-size:14px;font-weight:600;margin-bottom:2px">COGS by Category</div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:10px">Cost of the units sold in the ' + cur.date + ' snapshot (60 days), by product line' + (prev ? ', compared with ' + prev.date : '') + '.</div>' +
+    '<div style="overflow-x:auto"><table class="inv-tbl lb-tbl" style="width:100%;font-size:11px"><thead><tr>' +
+    '<th style="text-align:left">Category</th><th ' + th + '>Units</th><th ' + th + '>COGS</th><th ' + th + '>Share</th>' +
+    (prev ? '<th ' + th + '>Prev</th><th ' + th + '>Change</th>' : '') + '</tr></thead><tbody>';
+  names.forEach(function(n){
+    var b = cats[n], m = LINE_META[n] || {icon:'', color:'var(--muted)'};
+    var share = totCur > 0 ? (b.cogs / totCur * 100) : 0;
+    var diff = b.cogs - b.prev, dc = diff > 0 ? '#10b981' : (diff < 0 ? '#ef4444' : 'var(--muted)');
+    h += '<tr><td style="text-align:left"><span style="display:inline-block;width:3px;height:12px;background:' + m.color + ';border-radius:2px;vertical-align:middle;margin-right:7px"></span>' +
+        (m.icon ? m.icon + ' ' : '') + '<b>' + n + '</b>' +
+        (b.missing ? ' <span style="font-size:9px;color:var(--amber);font-weight:700;white-space:nowrap" title="SKUs sold that have no cost, so they are not in the COGS">' + b.missing + ' no cost</span>' : '') + '</td>' +
+      '<td style="text-align:right">' + b.units.toLocaleString() + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + fmt$(b.cogs) + '</td>' +
+      '<td style="text-align:right;color:var(--muted)">' + share.toFixed(0) + '%</td>' +
+      (prev ? '<td style="text-align:right;color:var(--muted)">' + fmt$(b.prev) + '</td>' +
+        '<td style="text-align:right;color:' + dc + ';font-weight:600">' + (diff > 0 ? '+' : (diff < 0 ? '-' : '')) + fmt$(Math.abs(diff)) + '</td>' : '') +
+      '</tr>';
+  });
+  var tdiff = totCur - totPrev, tdc = tdiff > 0 ? '#10b981' : (tdiff < 0 ? '#ef4444' : 'var(--muted)');
+  h += '<tr style="border-top:2px solid var(--border)"><td style="text-align:left;font-weight:700">TOTAL</td>' +
+    '<td style="text-align:right;font-weight:700">' + totUnits.toLocaleString() + '</td>' +
+    '<td style="text-align:right;font-weight:700">' + fmt$(totCur) + '</td><td></td>' +
+    (prev ? '<td style="text-align:right;font-weight:700">' + fmt$(totPrev) + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:' + tdc + '">' + (tdiff > 0 ? '+' : (tdiff < 0 ? '-' : '')) + fmt$(Math.abs(tdiff)) + '</td>' : '') +
+    '</tr></tbody></table></div></div>';
+  return h;
 }
 
 // Invalidate the cache after a fresh sync so next visit refetches
