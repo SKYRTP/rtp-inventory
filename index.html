@@ -970,7 +970,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v129</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v130</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -2460,7 +2460,9 @@ var PACKAGING = [
     linkedSkus:ALL_DMP_SKUS.map(function(s){return {s:s,q:1};})},
   {sku:'PKG-DMP-HLD',name:'Dampener Plastic Holders',variant:'Universal',cat:'raw-material',moq:10000,lead:30,
     linkedSkus:ALL_DMP_SKUS.map(function(s){return {s:s,q:1};})},
-  {sku:'PKG-DMP-ZLB',name:'Dampener Zip Lock Bags',variant:'Universal',cat:'raw-material',moq:10000,lead:1,manualDaily:2000},
+  // v130: daily use comes from dampener sales (1 bag per finished dampener), like the cards and holders, instead of a fixed 2,000
+  {sku:'PKG-DMP-ZLB',name:'Dampener Zip Lock Bags',variant:'Universal',cat:'raw-material',moq:10000,lead:1,
+    linkedSkus:ALL_DMP_SKUS.map(function(s){return {s:s,q:1};})},
   // Heel pad bags per size
   {sku:'PKG-HLP-INS',name:'Heel Pad Instructions',variant:'Universal',cat:'retail-pkg',moq:5000,lead:30,
     notes:'1 per heel pad bag — Design Plus'},
