@@ -970,7 +970,7 @@ body.owner-mode .team-only  { display: none; }
 </div>
 
 <header>
-  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v130</span></div>
+  <div class="logo">RTP Inventory <span>Command</span> <span id="app-version" style="font-size:9px;color:var(--muted);font-weight:400">v131</span></div>
   <div class="hrow">
     <span class="sync-meta" id="sync-meta">Mar 8 – May 7 2026 Shopify data loaded</span>
   </div>
@@ -3583,9 +3583,13 @@ function renderLineBreakdown() {
   var lines = {}, grandVal = 0, anyCost = false, tot = {prod: blank(), pkg: blank()};
   rows.forEach(function(r){
     var L = productLineOf(r);
-    if (!lines[L]) lines[L] = {prod: blank(), pkg: blank(), val: 0, units: 0};
+    if (!lines[L]) lines[L] = {prod: blank(), pkg: blank(), fin: blank(), raw: blank(), val: 0, units: 0};
     var part = /^PKG-/i.test(r.sku || '') ? 'pkg' : 'prod';
-    [lines[L][part], tot[part]].forEach(function(o){
+    // v131: within the product, finished (PD-) and raw / unpackaged (RAW-) are also counted apart
+    var sub = part === 'pkg' ? null : (/^RAW-/i.test(r.sku || '') ? 'raw' : 'fin');
+    var buckets = [lines[L][part], tot[part]];
+    if (sub) buckets.push(lines[L][sub]);
+    buckets.forEach(function(o){
       o.skus++;
       var hasStock = (typeof r.stock === 'number' && isFinite(r.stock));
       if (hasStock) o.units += r.stock;
@@ -3616,7 +3620,7 @@ function renderLineBreakdown() {
   }
   var h = '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px">' +
     '<div style="font-size:12px;font-weight:700;color:var(--text)">Inventory by Product Line</div>' +
-    '<div style="font-size:10px;color:var(--muted)">product (raw, in progress and finished), with each line\'s packaging and boxes on the row below it</div></div>';
+    '<div style="font-size:10px;color:var(--muted)">each line\'s product total, split into finished and raw / unpackaged, then its packaging and boxes</div></div>';
   h += '<div style="overflow-x:auto"><table class="inv-tbl lb-tbl" style="width:100%;font-size:11px"><thead><tr>' +
     '<th style="text-align:left">Product line</th><th>SKUs</th><th><span class="lb-long">Units on hand</span><span class="lb-short">Units</span></th>' +
     (owner ? '<th><span class="lb-long">Value at cost</span><span class="lb-short">Value</span></th><th>Share</th>' : '') + '</tr></thead><tbody>';
@@ -3629,6 +3633,12 @@ function renderLineBreakdown() {
     } else {
       h += '<tr><td style="text-align:left" colspan="' + (owner ? 5 : 3) + '"><span style="display:inline-block;width:3px;height:12px;background:' + m.color + ';border-radius:2px;vertical-align:middle;margin-right:7px"></span>' +
         m.icon + ' <b>' + n + '</b></td></tr>';
+    }
+    if (o.fin.skus && o.raw.skus) {
+      h += '<tr class="lb-sub" style="color:var(--text-dim)">' +
+        '<td style="text-align:left;padding-left:22px;font-size:10px">\u21b3 Finished' + noCostNote(o.fin) + '</td>' + cells(o.fin, null, false) + '</tr>';
+      h += '<tr class="lb-sub" style="color:var(--text-dim)">' +
+        '<td style="text-align:left;padding-left:22px;font-size:10px">\u21b3 Raw / unpackaged' + noCostNote(o.raw) + '</td>' + cells(o.raw, null, false) + '</tr>';
     }
     if (o.pkg.skus) {
       h += '<tr class="lb-pkg" style="color:var(--text-dim)">' +
